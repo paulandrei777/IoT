@@ -2,7 +2,7 @@ const API_URL = "http://localhost:5000/api/items";
 
 let allItems = [];
 
-// Fetch all items
+// Fetch all items from backend
 async function fetchItems() {
   try {
     const res = await fetch(API_URL);
@@ -13,7 +13,7 @@ async function fetchItems() {
   }
 }
 
-// Render the entire dashboard
+// Render all sections
 function renderDashboard() {
   updateStatistics();
   renderPendingItems();
@@ -21,12 +21,12 @@ function renderDashboard() {
   renderClaimedItems();
 }
 
-// Update statistics
+// Update dashboard statistics
 function updateStatistics() {
   const total = allItems.length;
-  const pending = allItems.filter(item => item.status === 'pending').length;
-  const approved = allItems.filter(item => item.status === 'approved').length;
-  const claimed = allItems.filter(item => item.status === 'claimed').length;
+  const pending = allItems.filter(i => i.status === 'pending').length;
+  const approved = allItems.filter(i => i.status === 'approved').length;
+  const claimed = allItems.filter(i => i.status === 'claimed').length;
 
   document.getElementById('totalItems').textContent = total;
   document.getElementById('pendingItems').textContent = pending;
@@ -34,45 +34,45 @@ function updateStatistics() {
   document.getElementById('claimedItems').textContent = claimed;
 }
 
-// Render pending items
+// Render items by status
 function renderPendingItems() {
   const container = document.getElementById('pendingContainer');
-  const filteredItems = allItems.filter(item => item.status === 'pending');
-  renderItems(container, filteredItems, true);
+  const items = allItems.filter(i => i.status === 'pending');
+  renderItems(container, items, true);
 }
 
-// Render approved items
 function renderApprovedItems() {
   const container = document.getElementById('approvedContainer');
-  const filteredItems = allItems.filter(item => item.status === 'approved');
-  renderItems(container, filteredItems, false);
+  const items = allItems.filter(i => i.status === 'approved');
+  renderItems(container, items, false);
 }
 
-// Render claimed items
 function renderClaimedItems() {
   const container = document.getElementById('claimedContainer');
-  const filteredItems = allItems.filter(item => item.status === 'claimed');
-  renderItems(container, filteredItems, false);
+  const items = allItems.filter(i => i.status === 'claimed');
+  renderItems(container, items, false);
 }
 
 // Generic render function
 function renderItems(container, items, showButtons = false) {
   container.innerHTML = '';
-  if (items.length === 0) {
+  if (!items.length) {
     container.innerHTML = '<p>No items available</p>';
     return;
   }
   items.forEach(item => {
     const div = document.createElement('div');
     div.className = 'item-card';
-    const date = new Date(item.created_at).toLocaleDateString();
+    const date = new Date(item.created_at).toLocaleString();
     div.innerHTML = `
-      <img src="${item.image_url}" alt="${item.name}">
+      <img src="${item.image_url}" alt="${item.name}" width="120">
       <h3>${item.name}</h3>
       <p>Date Detected: ${date}</p>
       <p class="status ${item.status}">${item.status.charAt(0).toUpperCase() + item.status.slice(1)}</p>
-      ${showButtons ? `<button class="approve-btn" onclick="approveItem('${item.id}')">Approve</button>
-                      <button class="reject-btn" onclick="rejectItem('${item.id}')">Reject</button>` : ''}
+      ${showButtons ? `
+        <button onclick="approveItem('${item.id}')">Approve</button>
+        <button onclick="rejectItem('${item.id}')">Reject</button>
+      ` : ''}
     `;
     container.appendChild(div);
   });
@@ -82,7 +82,6 @@ function renderItems(container, items, showButtons = false) {
 async function approveItem(id) {
   try {
     await fetch(`${API_URL}/${id}/approve`, { method: 'PATCH' });
-    // Update local
     const item = allItems.find(i => i.id === id);
     if (item) item.status = 'approved';
     renderDashboard();
@@ -95,7 +94,6 @@ async function approveItem(id) {
 async function rejectItem(id) {
   try {
     await fetch(`${API_URL}/${id}/reject`, { method: 'PATCH' });
-    // Update local
     const item = allItems.find(i => i.id === id);
     if (item) item.status = 'rejected';
     renderDashboard();
@@ -108,8 +106,6 @@ async function rejectItem(id) {
 document.getElementById('searchBar').addEventListener('input', function() {
   const query = this.value.toLowerCase();
   const filtered = allItems.filter(item => item.name.toLowerCase().includes(query));
-  // For simplicity, render all sections with filtered items, but only if they match status
-  // Actually, better to filter per section
   renderPendingItemsFiltered(filtered);
   renderApprovedItemsFiltered(filtered);
   renderClaimedItemsFiltered(filtered);
@@ -117,24 +113,21 @@ document.getElementById('searchBar').addEventListener('input', function() {
 
 function renderPendingItemsFiltered(filtered) {
   const container = document.getElementById('pendingContainer');
-  const items = filtered.filter(item => item.status === 'pending');
-  renderItems(container, items, true);
+  renderItems(container, filtered.filter(i => i.status === 'pending'), true);
 }
 
 function renderApprovedItemsFiltered(filtered) {
   const container = document.getElementById('approvedContainer');
-  const items = filtered.filter(item => item.status === 'approved');
-  renderItems(container, items, false);
+  renderItems(container, filtered.filter(i => i.status === 'approved'), false);
 }
 
 function renderClaimedItemsFiltered(filtered) {
   const container = document.getElementById('claimedContainer');
-  const items = filtered.filter(item => item.status === 'claimed');
-  renderItems(container, items, false);
+  renderItems(container, filtered.filter(i => i.status === 'claimed'), false);
 }
 
 // Refresh button
 document.getElementById('refreshBtn').addEventListener('click', fetchItems);
 
-// Load on page open
+// Load items on page load
 fetchItems();
