@@ -106,6 +106,18 @@ const claimItem = async (req, res) => {
     if (!data || data.length === 0)
       return res.status(404).json({ error: 'Item not found or already claimed' });
 
+    const itemUuid = data[0].id;
+    console.log("Logging action for item:", itemUuid);
+
+    const { error: logError } = await supabase.from('item_logs').insert([{
+      item_id: itemUuid,
+      action: 'claimed',
+      performed_by: performedBy,
+      timestamp: new Date().toISOString()
+    }]);
+
+    if (logError) console.error("Failed to log action:", logError);
+
     res.json({ message: 'Item claimed successfully', item: data[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });

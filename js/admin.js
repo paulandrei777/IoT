@@ -78,10 +78,10 @@ function renderPendingItems(filteredItems = null) {
 function renderApprovedItems(filteredItems = null) {
     const items = filteredItems ? filteredItems.filter(i => i.status === 'approved') : allItems.filter(i => i.status === 'approved');
     const container = document.getElementById('approvedContainer');
-    renderItems(container, items, false);
+    renderApprovedItemsTable(container, items);
 }
 
-// Generic render function
+// Generic render function for pending items
 function renderItems(container, items, showButtons = false) {
     container.innerHTML = '';
     if (!items.length) {
@@ -101,9 +101,32 @@ function renderItems(container, items, showButtons = false) {
                 <div class="actions">
                     <button class="btn btn-success" onclick="approveItem('${item.id}')">Approve</button>
                     <button class="btn btn-danger" onclick="rejectItem('${item.id}')">Reject</button>
-                    <button class="btn btn-primary" onclick="claimItem('${item.id}')">Claim</button>
                 </div>
             ` : ''}
+        `;
+        container.appendChild(div);
+    });
+}
+
+// Render approved items in table format
+function renderApprovedItemsTable(container, items) {
+    container.innerHTML = '';
+    if (!items.length) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No approved items available</p>';
+        return;
+    }
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'approved-item';
+        const date = new Date(item.created_at).toLocaleDateString();
+        div.innerHTML = `
+            <img src="${item.image_url}" alt="${item.name}" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'">
+            <h4>${item.name}</h4>
+            <p>Approved: ${date}</p>
+            <span class="status status-approved">Approved</span>
+            <div class="actions" style="margin-top: 12px;">
+                <button class="btn btn-primary" onclick="claimItem('${item.id}')">Claim</button>
+            </div>
         `;
         container.appendChild(div);
     });
@@ -206,7 +229,7 @@ function displayLogs(logs) {
 
 // Setup dashboard event listeners
 function setupDashboardEventListeners() {
-    // Search functionality
+    // Global search functionality
     const searchBar = document.getElementById('searchBar');
     if (searchBar) {
         searchBar.addEventListener('input', function() {
@@ -220,6 +243,19 @@ function setupDashboardEventListeners() {
         });
     }
 
+    // Approved items specific search
+    const approvedSearchBar = document.getElementById('approvedSearchBar');
+    if (approvedSearchBar) {
+        approvedSearchBar.addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            const filtered = allItems.filter(item =>
+                item.name.toLowerCase().includes(query) &&
+                item.status === 'approved'
+            );
+            renderApprovedItems(filtered);
+        });
+    }
+
     // Refresh button
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
@@ -227,13 +263,37 @@ function setupDashboardEventListeners() {
     }
 }
 
+// Lightbox functions
+function openLightbox(src, alt) {
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    lightboxImg.src = src;
+    lightboxImg.alt = alt;
+    lightbox.classList.add('active');
+}
+
+function closeLightbox() {
+    const lightbox = document.getElementById('lightbox');
+    lightbox.classList.remove('active');
+}
+
+// Close lightbox on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeLightbox();
+    }
+});
+
 // Utility functions
 function getBadgeClass(action) {
     switch (action.toLowerCase()) {
+        case 'approve':
         case 'approved':
             return 'badge-approved';
+        case 'reject':
         case 'rejected':
             return 'badge-rejected';
+        case 'claim':
         case 'claimed':
             return 'badge-claimed';
         default:

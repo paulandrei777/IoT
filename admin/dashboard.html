@@ -60,9 +60,18 @@
 
       <section class="admin-section">
         <h2>Approved Items</h2>
-        <div id="approvedContainer" class="items-grid"></div>
+        <div class="approved-controls">
+          <input type="text" id="approvedSearchBar" placeholder="Search approved items by name...">
+        </div>
+        <div id="approvedContainer" class="approved-table"></div>
       </section>
     </main>
+  </div>
+
+  <!-- Lightbox Modal -->
+  <div id="lightbox" class="lightbox">
+    <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+    <img id="lightbox-img" src="" alt="">
   </div>
 
   <script src="../js/admin.js"></script>
