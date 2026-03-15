@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DominiFinds - Lost and Found</title>
+  <link rel="stylesheet" href="../css/global.css">
+  <link rel="stylesheet" href="../css/client.css">
+</head>
+
+<body class="client-layout">
+  <header class="client-header">
+    <h1>DominiFinds</h1>
+    <p>Find your lost items here.</p>
+  </header>
+
+  <main class="client-main container">
+    <div class="client-controls">
+      <div class="search-group">
+        <input type="text" id="searchBar" placeholder="Search items by name...">
+        <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+      </div>
+    </div>
+
+    <section class="items-section">
+      <h2>Available Items</h2>
+      <div id="approvedContainer" class="items-grid"></div>
+    </section>
+  </main>
+
+  <script src="../js/main.js"></script>
+</body>
+
+</html>

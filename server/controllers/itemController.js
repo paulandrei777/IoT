@@ -63,18 +63,6 @@ const approveItem = async (req, res) => {
     if (!data || data.length === 0)
       return res.status(404).json({ error: 'Item not found or already processed' });
 
-    const itemUuid = data[0].id;
-    console.log("Logging action for item:", itemUuid);
-
-    const { error: logError } = await supabase.from('item_logs').insert([{
-      item_id: itemUuid,
-      action: 'approved',
-      performed_by: 'admin@example.com',
-      timestamp: new Date().toISOString()
-    }]);
-
-    if (logError) console.error("Failed to log action:", logError);
-
     res.json({ message: 'Item approved', item: data[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -95,32 +83,21 @@ const rejectItem = async (req, res) => {
     if (!data || data.length === 0)
       return res.status(404).json({ error: 'Item not found or already processed' });
 
-    const itemUuid = data[0].id;
-    console.log("Logging action for item:", itemUuid);
-
-    const { error: logError } = await supabase.from('item_logs').insert([{
-      item_id: itemUuid,
-      action: 'rejected',
-      performed_by: 'admin@example.com',
-      timestamp: new Date().toISOString()
-    }]);
-
-    if (logError) console.error("Failed to log action:", logError);
-
     res.json({ message: 'Item rejected', item: data[0] });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-// Claim an item (Student)
+// Claim an item (Student or Admin)
 const claimItem = async (req, res) => {
   const { id } = req.params;
   const { studentEmail } = req.body;
+  const performedBy = studentEmail || 'Admin';
   try {
     const { data, error } = await supabase
       .from('items')
-      .update({ status: 'claimed', claimed_by: studentEmail })
+      .update({ status: 'claimed', claimed_by: performedBy })
       .eq('id', id)
       .eq('status', 'approved')
       .select();
@@ -128,18 +105,6 @@ const claimItem = async (req, res) => {
     if (error) throw error;
     if (!data || data.length === 0)
       return res.status(404).json({ error: 'Item not found or already claimed' });
-
-    const itemUuid = data[0].id;
-    console.log("Logging action for item:", itemUuid);
-
-    const { error: logError } = await supabase.from('item_logs').insert([{
-      item_id: itemUuid,
-      action: 'claimed',
-      performed_by: studentEmail,
-      timestamp: new Date().toISOString()
-    }]);
-
-    if (logError) console.error("Failed to log action:", logError);
 
     res.json({ message: 'Item claimed successfully', item: data[0] });
   } catch (err) {

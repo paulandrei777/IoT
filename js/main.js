@@ -24,7 +24,7 @@ function renderApprovedItems() {
 function renderItems(container, items) {
   container.innerHTML = '';
   if (items.length === 0) {
-    container.innerHTML = '<p>No items available</p>';
+    container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No items available</p>';
     return;
   }
   items.forEach(item => {
@@ -35,10 +35,23 @@ function renderItems(container, items) {
       <img src="${item.image_url}" alt="${item.name}">
       <h3>${item.name}</h3>
       <p>Date Detected: ${date}</p>
-      <p class="status approved">Approved</p>
+      <span class="status status-approved">Approved</span>
+      <button class="claim-btn" onclick="claimItem('${item.id}')">Claim Item</button>
     `;
     container.appendChild(div);
   });
+}
+
+// Claim item
+async function claimItem(id) {
+  try {
+    await fetch(`${API_URL}/${id}/claim`, { method: 'PATCH' });
+    const item = allItems.find(i => i.id === id);
+    if (item) item.status = 'claimed';
+    renderApprovedItems();
+  } catch (error) {
+    console.error('Error claiming item:', error);
+  }
 }
 
 // Search functionality

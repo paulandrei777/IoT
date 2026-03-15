@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - DominiFinds</title>
+  <link rel="stylesheet" href="../css/global.css">
+  <link rel="stylesheet" href="../css/admin.css">
+</head>
+
+<body>
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <h2>Admin Panel</h2>
+      <nav>
+        <a href="dashboard.html" class="active">Dashboard</a>
+        <a href="pending.html">Pending Items</a>
+        <a href="approved.html">Approved Items</a>
+        <a href="auditLogs.html">Audit Logs</a>
+      </nav>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-header">
+        <h1>DominiFinds Admin Dashboard</h1>
+        <p>Review detected lost items and approve them for student viewing.</p>
+      </header>
+
+      <section class="admin-cards">
+        <div class="admin-card">
+          <h3>Total Items</h3>
+          <p class="value" id="totalItems">0</p>
+        </div>
+        <div class="admin-card">
+          <h3>Pending Items</h3>
+          <p class="value" id="pendingItems">0</p>
+        </div>
+        <div class="admin-card">
+          <h3>Approved Items</h3>
+          <p class="value" id="approvedItems">0</p>
+        </div>
+        <div class="admin-card">
+          <h3>Claimed Items</h3>
+          <p class="value" id="claimedItems">0</p>
+        </div>
+      </section>
+
+      <div class="admin-controls">
+        <div class="search-group">
+          <input type="text" id="searchBar" placeholder="Search items by name...">
+          <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+        </div>
+      </div>
+
+      <section class="admin-section">
+        <h2>Pending Items</h2>
+        <div id="pendingContainer" class="items-grid"></div>
+      </section>
+
+      <section class="admin-section">
+        <h2>Approved Items</h2>
+        <div id="approvedContainer" class="items-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/admin.js"></script>
+</body>
+
+</html>

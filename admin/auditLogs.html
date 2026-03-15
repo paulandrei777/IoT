@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Audit Logs</title>
+  <link rel="stylesheet" href="../css/global.css">
+  <link rel="stylesheet" href="../css/admin.css">
+</head>
+
+<body>
+  <div class="admin-layout">
+    <aside class="sidebar">
+      <h2>Admin Panel</h2>
+      <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <a href="pending.html">Pending Items</a>
+        <a href="approved.html">Approved Items</a>
+        <a href="auditLogs.html" class="active">Audit Logs</a>
+      </nav>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-header">
+        <h1>Audit Logs</h1>
+        <p>View all item approval, rejection, and claim activities.</p>
+      </header>
+
+      <section class="admin-section">
+        <div id="logs-container">
+          <table class="admin-table audit-log-table">
+            <thead>
+              <tr>
+                <th>Log ID</th>
+                <th>Item ID</th>
+                <th>Action</th>
+                <th>Performed By</th>
+                <th>Date / Time</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody">
+              <!-- Logs will be inserted here -->
+            </tbody>
+          </table>
+          <div id="no-logs" class="no-logs"
+            style="text-align: center; padding: 40px; color: var(--gray-600); font-style: italic; display: none;">No
+            logs available</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="../js/admin.js"></script>
+</body>
+
+</html>

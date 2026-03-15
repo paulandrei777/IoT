@@ -15,4 +15,21 @@ const getItemLogs = async (req, res) => {
   }
 };
 
-module.exports = { getItemLogs };
+const createItemLog = async (req, res) => {
+  try {
+    const { item_id, action, performed_by, timestamp } = req.body;
+
+    const { data, error } = await supabase
+      .from('item_logs')
+      .insert([{ item_id, action, performed_by, timestamp }])
+      .select();
+
+    if (error) throw error;
+
+    res.status(201).json(data[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+module.exports = { getItemLogs, createItemLog };
