@@ -3,13 +3,20 @@ const API_LOGS_URL = "http://localhost:5000/api/item-logs";
 
 let allItems = [];
 let allLogs = [];
+let claimRequests = [];
 
 // Initialize based on page
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('pendingContainer')) {
         // Dashboard page
         fetchItems();
+        fetchClaimRequests();
         setupDashboardEventListeners();
+        // Poll for updates every 30 seconds
+        setInterval(() => {
+            fetchItems();
+            fetchClaimRequests();
+        }, 30000);
     }
     if (document.getElementById('logs-tbody')) {
         // Audit Logs page
@@ -48,11 +55,26 @@ async function fetchLogs() {
     }
 }
 
+// Fetch claim requests
+async function fetchClaimRequests() {
+    try {
+        const response = await fetch(`${API_ITEMS_URL}/claim-requests`);
+        if (!response.ok) throw new Error('Failed to fetch claim requests');
+        claimRequests = await response.json();
+        renderClaimRequests();
+    } catch (error) {
+        console.error('Error fetching claim requests:', error);
+        const container = document.getElementById('claimRequestsContainer');
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">Error loading claim requests. Please refresh the page.</p>';
+    }
+}
+
 // Render all dashboard sections
 function renderDashboard() {
     updateStatistics();
     renderPendingItems();
     renderApprovedItems();
+    renderClaimedItems();
 }
 
 // Update dashboard statistics
@@ -79,6 +101,75 @@ function renderApprovedItems(filteredItems = null) {
     const items = filteredItems ? filteredItems.filter(i => i.status === 'approved') : allItems.filter(i => i.status === 'approved');
     const container = document.getElementById('approvedContainer');
     renderApprovedItemsTable(container, items);
+}
+
+// Render claimed items
+function renderClaimedItems() {
+    const items = allItems.filter(i => i.status === 'claimed');
+    const container = document.getElementById('claimedContainer');
+    renderClaimedItemsTable(container, items);
+}
+
+// Render claim requests
+function renderClaimRequests() {
+    const container = document.getElementById('claimRequestsContainer');
+    container.innerHTML = '';
+
+    if (!claimRequests.length) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No pending claim requests</p>';
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'admin-table claim-requests-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr>
+            <th>Request ID</th>
+            <th>Item Name</th>
+            <th>Student Email</th>
+            <th>Pickup Notes</th>
+            <th>Date / Time</th>
+            <th>Actions</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    claimRequests.forEach(request => {
+        const row = document.createElement('tr');
+        const date = new Date(request.timestamp).toLocaleString();
+
+        row.innerHTML = `
+            <td>${request.id}</td>
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img src="${getItemImage(request.item_id)}" alt="${request.item_name}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${request.item_name}')" onerror="this.src='../uploads/default.png'">
+                    ${request.item_name}
+                </div>
+            </td>
+            <td>${request.student_email}</td>
+            <td>${request.pickup_notes || 'None'}</td>
+            <td>${date}</td>
+            <td>
+                <div class="actions">
+                    <button class="btn btn-success" onclick="approveClaim('${request.item_id}')">Approve</button>
+                    <button class="btn btn-danger" onclick="rejectClaim('${request.item_id}')">Reject</button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    container.appendChild(table);
+}
+
+// Helper function to get item image
+function getItemImage(itemId) {
+    const item = allItems.find(i => i.id === itemId);
+    return item ? item.image_url : '../uploads/default.png';
 }
 
 // Generic render function for pending items
@@ -124,12 +215,55 @@ function renderApprovedItemsTable(container, items) {
             <h4>${item.name}</h4>
             <p>Approved: ${date}</p>
             <span class="status status-approved">Approved</span>
-            <div class="actions" style="margin-top: 12px;">
-                <button class="btn btn-primary" onclick="claimItem('${item.id}')">Claim</button>
-            </div>
         `;
         container.appendChild(div);
     });
+}
+
+// Render claimed items in table format
+function renderClaimedItemsTable(container, items) {
+    container.innerHTML = '';
+    if (!items.length) {
+        container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No claimed items available</p>';
+        return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'admin-table claimed-items-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr>
+            <th>Image</th>
+            <th>Item Name</th>
+            <th>Claimed By</th>
+            <th>Date Claimed</th>
+            <th>Pick-up Date</th>
+            <th>Status</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    items.forEach(item => {
+        const row = document.createElement('tr');
+        const claimedBy = item.claimed_by || 'Unknown';
+        const dateClaimed = item.claimed_date ? new Date(item.claimed_date).toLocaleDateString() : new Date(item.created_at).toLocaleDateString();
+        const pickupDate = item.pickup_date ? new Date(item.pickup_date).toLocaleDateString() : 'Not set';
+
+        row.innerHTML = `
+            <td><img src="${item.image_url}" alt="${item.name}" class="table-thumbnail" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'"></td>
+            <td>${item.name}</td>
+            <td>${claimedBy}</td>
+            <td>${dateClaimed}</td>
+            <td>${pickupDate}</td>
+            <td><span class="status-highlight claimed">Claimed</span></td>
+        `;
+        tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    container.appendChild(table);
 }
 
 // Action handlers
@@ -168,6 +302,38 @@ async function performAction(id, action, newStatus) {
     } catch (error) {
         console.error(`Error ${action}ing item:`, error);
         showError(`Failed to ${action} item. Please try again.`);
+    }
+}
+
+// Approve claim request
+async function approveClaim(id) {
+    await performClaimAction(id, 'approve-claim', 'Claim approved successfully');
+}
+
+// Reject claim request
+async function rejectClaim(id) {
+    await performClaimAction(id, 'reject-claim', 'Claim rejected successfully');
+}
+
+async function performClaimAction(id, action, successMessage) {
+    try {
+        const res = await fetch(`${API_ITEMS_URL}/${id}/${action}`, { method: 'PATCH' });
+        if (!res.ok) throw new Error(`Failed to ${action.replace('-', ' ')} claim`);
+
+        // Refresh items and claim requests
+        await fetchItems();
+        await fetchClaimRequests();
+
+        // If on audit logs page, refresh logs
+        if (document.getElementById('logs-tbody')) {
+            fetchLogs();
+        }
+
+        showSuccess(successMessage);
+
+    } catch (error) {
+        console.error(`Error ${action}ing claim:`, error);
+        showError(`Failed to ${action.replace('-', ' ')} claim. Please try again.`);
     }
 }
 
@@ -289,12 +455,15 @@ function getBadgeClass(action) {
     switch (action.toLowerCase()) {
         case 'approve':
         case 'approved':
+        case 'claim_approved':
             return 'badge-approved';
         case 'reject':
         case 'rejected':
+        case 'claim_rejected':
             return 'badge-rejected';
         case 'claim':
         case 'claimed':
+        case 'claim_requested':
             return 'badge-claimed';
         default:
             return '';
@@ -307,5 +476,10 @@ function capitalize(str) {
 
 function showError(message) {
     // Simple error display - could be enhanced with a toast notification
+    alert(message);
+}
+
+function showSuccess(message) {
+    // Simple success display - could be enhanced with a toast notification
     alert(message);
 }

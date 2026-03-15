@@ -124,10 +124,166 @@ const claimItem = async (req, res) => {
   }
 };
 
+// Request to claim an item (Student)
+const requestClaim = async (req, res) => {
+  const { id } = req.params;
+  const { studentEmail, pickupNotes } = req.body;
+
+  if (!studentEmail) {
+    return res.status(400).json({ error: 'Student email is required' });
+  }
+
+  try {
+    // Check if item exists and is approved
+    const { data: itemData, error: itemError } = await supabase
+      .from('items')
+      .select('*')
+      .eq('id', id)
+      .eq('status', 'approved')
+      .single();
+
+    if (itemError || !itemData) {
+      return res.status(404).json({ error: 'Item not found or not available for claiming' });
+    }
+
+    // Log the claim request with pickup notes
+    const { error: logError } = await supabase.from('item_logs').insert([{
+      item_id: id,
+      action: 'claim_requested',
+      performed_by: studentEmail,
+      timestamp: new Date().toISOString()
+    }]);
+
+    if (logError) {
+      console.error("Failed to log claim request:", logError);
+      // Continue anyway, don't fail the request
+    }
+
+    res.json({ message: 'Claim request submitted successfully' });
+  } catch (err) {
+    console.error('Error processing claim request:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get pending claim requests
+const getClaimRequests = async (req, res) => {
+  try {
+    // Get all claim_requested logs
+    const { data: allRequests, error } = await supabase
+      .from('item_logs')
+      .select('id, item_id, performed_by, timestamp')
+      .eq('action', 'claim_requested')
+      .order('timestamp', { ascending: false });
+
+    if (error) throw error;
+
+    // Get all approved/rejected claim logs
+    const { data: processedLogs, error: processedError } = await supabase
+      .from('item_logs')
+      .select('item_id')
+      .in('action', ['claim_approved', 'claim_rejected']);
+
+    if (processedError) throw processedError;
+
+    const processedItemIds = new Set(processedLogs.map(log => log.item_id));
+
+    // Filter out processed requests
+    const pendingRequests = allRequests.filter(req => !processedItemIds.has(req.item_id));
+
+    // Get item details for each pending request
+    const claimRequests = [];
+    for (const req of pendingRequests) {
+      const { data: item, error: itemError } = await supabase
+        .from('items')
+        .select('name')
+        .eq('id', req.item_id)
+        .single();
+
+      if (!itemError && item) {
+        claimRequests.push({
+          id: req.id,
+          item_id: req.item_id,
+          item_name: item.name,
+          student_email: req.performed_by,
+          pickup_notes: '', // TODO: Add details column to item_logs table
+          timestamp: req.timestamp
+        });
+      }
+    }
+
+    res.json(claimRequests);
+  } catch (err) {
+    console.error('Error fetching claim requests:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Approve a claim request
+const approveClaim = async (req, res) => {
+  const { id } = req.params; // item id
+
+  try {
+    // Update item status to claimed
+    const { data: itemData, error: itemError } = await supabase
+      .from('items')
+      .update({ status: 'claimed' })
+      .eq('id', id)
+      .eq('status', 'approved')
+      .select();
+
+    if (itemError) throw itemError;
+    if (!itemData || itemData.length === 0) {
+      return res.status(404).json({ error: 'Item not found or not in approved status' });
+    }
+
+    // Log the approval
+    const { error: logError } = await supabase.from('item_logs').insert([{
+      item_id: id,
+      action: 'claim_approved',
+      performed_by: 'Admin',
+      timestamp: new Date().toISOString()
+    }]);
+
+    if (logError) console.error("Failed to log claim approval:", logError);
+
+    res.json({ message: 'Claim approved successfully', item: itemData[0] });
+  } catch (err) {
+    console.error('Error approving claim:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Reject a claim request
+const rejectClaim = async (req, res) => {
+  const { id } = req.params; // item id
+
+  try {
+    // Item status remains approved, just log the rejection
+    const { error: logError } = await supabase.from('item_logs').insert([{
+      item_id: id,
+      action: 'claim_rejected',
+      performed_by: 'Admin',
+      timestamp: new Date().toISOString()
+    }]);
+
+    if (logError) throw logError;
+
+    res.json({ message: 'Claim rejected successfully' });
+  } catch (err) {
+    console.error('Error rejecting claim:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 module.exports = {
   uploadItem,
   getItems,
   approveItem,
   rejectItem,
-  claimItem
+  claimItem,
+  requestClaim,
+  getClaimRequests,
+  approveClaim,
+  rejectClaim
 };

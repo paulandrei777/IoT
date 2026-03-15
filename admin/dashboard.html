@@ -15,8 +15,6 @@
       <h2>Admin Panel</h2>
       <nav>
         <a href="dashboard.html" class="active">Dashboard</a>
-        <a href="pending.html">Pending Items</a>
-        <a href="approved.html">Approved Items</a>
         <a href="auditLogs.html">Audit Logs</a>
       </nav>
     </aside>
@@ -64,6 +62,16 @@
           <input type="text" id="approvedSearchBar" placeholder="Search approved items by name...">
         </div>
         <div id="approvedContainer" class="approved-table"></div>
+      </section>
+
+      <section class="admin-section">
+        <h2>Claimed Items</h2>
+        <div id="claimedContainer" class="claimed-table"></div>
+      </section>
+
+      <section class="admin-section">
+        <h2>Claim Requests</h2>
+        <div id="claimRequestsContainer" class="claim-requests-table"></div>
       </section>
     </main>
   </div>

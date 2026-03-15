@@ -355,7 +355,104 @@
   background: var(--gray-100);
 }
 
-/* Audit Log Table Customization */
+/* Claimed Items Table */
+.claimed-table {
+  overflow-x: auto;
+}
+
+.claimed-items-table {
+  width: 100%;
+  min-width: 600px;
+}
+
+/* Claim Requests Table */
+.claim-requests-table {
+  overflow-x: auto;
+}
+
+.claim-requests-table table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
+}
+
+.claim-requests-table th,
+.claim-requests-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.claim-requests-table th {
+  background-color: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-800);
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.claim-requests-table tbody tr:hover {
+  background-color: var(--gray-50);
+}
+
+.claim-requests-table .actions {
+  display: flex;
+  gap: 8px;
+}
+
+.claim-requests-table .badge {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.claim-requests-table .badge-pending {
+  background: #FFF8E1;
+  color: #F57F17;
+  border: 1px solid #FFCC02;
+}
+
+.table-thumbnail {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  border: 1px solid var(--gray-200);
+}
+
+.table-thumbnail:hover {
+  transform: scale(1.1);
+}
+
+/* Responsive Table */
+@media (max-width: 768px) {
+  .claimed-items-table th,
+  .claimed-items-table td {
+    padding: 8px 4px;
+    font-size: 0.8rem;
+  }
+
+  .table-thumbnail {
+    width: 40px;
+    height: 40px;
+  }
+
+  .claimed-items-table th:nth-child(1),
+  .claimed-items-table td:nth-child(1) {
+    width: 60px;
+  }
+}
 .audit-log-table .badge {
   font-size: 0.7rem;
   padding: 3px 8px;
