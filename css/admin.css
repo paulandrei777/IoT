@@ -43,6 +43,35 @@
   border-left-color: var(--red);
 }
 
+/* User Profile Card in Sidebar */
+.user-profile-card {
+  margin-top: auto;
+  padding: 20px 24px 24px;
+  border-top: 1px solid var(--gray-200);
+}
+
+.user-info {
+  margin-bottom: 16px;
+}
+
+.user-name {
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 4px;
+}
+
+.user-email {
+  font-size: 0.9rem;
+  color: var(--gray-600);
+  margin-bottom: 4px;
+}
+
+.user-role {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  text-transform: capitalize;
+}
+
 /* Admin Dashboard Layout */
 .admin-layout {
   display: flex;

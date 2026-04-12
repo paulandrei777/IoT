@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register - DominiFinds</title>
+  <link rel="stylesheet" href="../css/auth.css">
+</head>
+
+<body>
+  <div class="auth-container">
+    <div class="auth-brand">
+      <h1>DominiFinds</h1>
+      <p>Smart Lost & Found System</p>
+    </div>
+
+    <div class="auth-form">
+      <h2>Create account</h2>
+      <p>Create your student account to get started.</p>
+
+      <div id="errorMessage" class="error-message"></div>
+      <div id="successMessage" class="success-message"></div>
+
+      <form id="registerForm">
+        <div class="field-group">
+          <label for="fullName">Full Name</label>
+          <input type="text" id="fullName" name="fullName" placeholder="Enter your full name" required
+            autocomplete="name" />
+        </div>
+
+        <div class="field-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="you@school.edu" required autocomplete="email" />
+        </div>
+
+        <div class="field-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" placeholder="Create a password" required
+            autocomplete="new-password" />
+        </div>
+
+        <button type="submit" class="auth-button">Create Account</button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="login.html">Sign in</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
+
+  <script>
+    const form = document.getElementById("registerForm");
+    const errorBox = document.getElementById("errorMessage");
+    const successBox = document.getElementById("successMessage");
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = "block";
+      successBox.style.display = "none";
+    }
+
+    function showSuccess(msg) {
+      successBox.textContent = msg;
+      successBox.style.display = "block";
+      errorBox.style.display = "none";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const fullName = document.getElementById("fullName").value;
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        const result = await signUpWithEmail(fullName, email, password);
+
+        showSuccess("Account created successfully!");
+
+        setTimeout(() => {
+          window.location.href = "login.html";
+        }, 1500);
+
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await checkSessionAndRedirect();
+    });
+  </script>
+
+</body>
+
+</html>

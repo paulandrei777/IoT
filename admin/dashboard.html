@@ -17,6 +17,16 @@
         <a href="dashboard.html" class="active">Dashboard</a>
         <a href="auditLogs.html">Audit Logs</a>
       </nav>
+
+      <!-- User Profile Card -->
+      <div class="user-profile-card">
+        <div class="user-info">
+          <p class="user-name" id="userName">Loading...</p>
+          <p class="user-email" id="userEmail">Loading...</p>
+          <p class="user-role" id="userRole">Loading...</p>
+        </div>
+        <button class="btn btn-danger" id="logoutBtn">Logout</button>
+      </div>
     </aside>
 
     <main class="admin-main">
@@ -82,6 +92,8 @@
     <img id="lightbox-img" src="" alt="">
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="../js/auth.js"></script>
   <script src="../js/admin.js"></script>
 </body>
 

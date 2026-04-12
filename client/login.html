@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - DominiFinds</title>
+  <link rel="stylesheet" href="../css/auth.css">
+</head>
+
+<body>
+  <div class="auth-container">
+    <div class="auth-brand">
+      <h1>DominiFinds</h1>
+      <p>Smart Lost & Found System</p>
+    </div>
+
+    <div class="auth-form">
+      <h2>Sign in</h2>
+      <p>Enter your school email and password to continue.</p>
+
+      <div id="errorMessage" class="error-message"></div>
+
+      <form id="loginForm">
+        <div class="field-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="you@school.edu" required autocomplete="email" />
+        </div>
+
+        <div class="field-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" placeholder="Enter your password" required
+            autocomplete="current-password" />
+        </div>
+
+        <button type="submit" class="auth-button">Login</button>
+      </form>
+
+      <div class="auth-footer">
+        Don't have an account? <a href="register.html">Create one</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <!-- Your auth file -->
+  <script src="../js/auth.js"></script>
+
+  <script>
+    const form = document.getElementById("loginForm");
+    const errorBox = document.getElementById("errorMessage");
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.style.display = "block";
+    }
+
+    function hideError() {
+      errorBox.textContent = "";
+      errorBox.style.display = "none";
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideError();
+
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        // 1. LOGIN
+        await loginWithEmail(email, password);
+
+        // 2. GET SESSION (IMPORTANT FIX)
+        const { data } = await supabaseClient.auth.getSession();
+        const userId = data?.session?.user?.id;
+
+        if (!userId) throw new Error("No session found");
+
+        // 3. REDIRECT BASED ON ROLE
+        await redirectBasedOnRole(userId);
+
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await checkSessionAndRedirect();
+    });
+  </script>
+</body>
+
+</html>

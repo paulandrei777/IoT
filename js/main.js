@@ -26,6 +26,41 @@ async function fetchItems() {
   }
 }
 
+// Load user profile
+async function loadUserProfile() {
+    try {
+        const { data } = await supabaseClient.auth.getSession();
+        const session = data?.session;
+        if (!session?.user?.id) {
+            window.location.href = loginPagePath();
+            return;
+        }
+
+        const profile = await getProfile(session.user.id);
+
+        // Role-based access control
+        if (profile.role !== 'student') {
+            window.location.href = adminDashboardPath();
+            return;
+        }
+
+        document.getElementById('userName').textContent = profile.full_name || 'Unknown';
+        document.getElementById('userEmail').textContent = profile.email || 'No email';
+        document.getElementById('userRole').textContent = profile.role || 'No role';
+
+        // Attach logout handler
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async () => {
+                await logout();
+            });
+        }
+    } catch (error) {
+        console.error('Error loading user profile:', error);
+        window.location.href = loginPagePath();
+    }
+}
+
 // Render approved/claimed items
 function renderApprovedItems() {
   const container = document.getElementById('approvedContainer');
@@ -181,4 +216,5 @@ imageModal.addEventListener('keydown', e => { if (e.key === 'Escape') closeImage
 imageModalImg.addEventListener('click', toggleZoom);
 
 // Load on page open
+loadUserProfile();
 fetchItems();

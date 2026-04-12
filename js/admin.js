@@ -9,6 +9,7 @@ let claimRequests = [];
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('pendingContainer')) {
         // Dashboard page
+        loadUserProfile();
         fetchItems();
         fetchClaimRequests();
         setupDashboardEventListeners();
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (document.getElementById('logs-tbody')) {
         // Audit Logs page
+        loadUserProfile();
         fetchLogs();
     }
 });
@@ -52,6 +54,41 @@ async function fetchLogs() {
         console.error('Error fetching logs:', error);
         const tbody = document.getElementById('logs-tbody');
         tbody.innerHTML = '<tr><td colspan="5">Error loading logs. Please refresh the page.</td></tr>';
+    }
+}
+
+// Load user profile
+async function loadUserProfile() {
+    try {
+        const { data } = await supabaseClient.auth.getSession();
+        const session = data?.session;
+        if (!session?.user?.id) {
+            window.location.href = loginPagePath();
+            return;
+        }
+
+        const profile = await getProfile(session.user.id);
+
+        // Role-based access control
+        if (profile.role !== 'admin') {
+            window.location.href = studentDashboardPath();
+            return;
+        }
+
+        document.getElementById('userName').textContent = profile.full_name || 'Unknown';
+        document.getElementById('userEmail').textContent = profile.email || 'No email';
+        document.getElementById('userRole').textContent = profile.role || 'No role';
+
+        // Attach logout handler
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', async () => {
+                await logout();
+            });
+        }
+    } catch (error) {
+        console.error('Error loading user profile:', error);
+        window.location.href = loginPagePath();
     }
 }
 
