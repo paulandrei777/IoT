@@ -238,7 +238,6 @@ function renderClaimedItemsTable(container, items) {
             <th>Item Name</th>
             <th>Claimed By</th>
             <th>Date Claimed</th>
-            <th>Pick-up Date</th>
             <th>Status</th>
         </tr>
     `;
@@ -249,14 +248,12 @@ function renderClaimedItemsTable(container, items) {
         const row = document.createElement('tr');
         const claimedBy = item.claimed_by || 'Unknown';
         const dateClaimed = item.claimed_date ? new Date(item.claimed_date).toLocaleDateString() : new Date(item.created_at).toLocaleDateString();
-        const pickupDate = item.pickup_date ? new Date(item.pickup_date).toLocaleDateString() : 'Not set';
 
         row.innerHTML = `
             <td><img src="${item.image_url}" alt="${item.name}" class="table-thumbnail" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'"></td>
             <td>${item.name}</td>
             <td>${claimedBy}</td>
             <td>${dateClaimed}</td>
-            <td>${pickupDate}</td>
             <td><span class="status-highlight claimed">Claimed</span></td>
         `;
         tbody.appendChild(row);

@@ -11,6 +11,10 @@ const claimModalMessage = document.getElementById('claimModalMessage');
 const requestClaimBtn = document.getElementById('requestClaimBtn');
 let activeItemId = null;
 
+// Image Modal state
+const imageModal = document.getElementById('imageModal');
+const imageModalImg = document.getElementById('imageModalImg');
+
 // Fetch all items
 async function fetchItems() {
   try {
@@ -47,7 +51,7 @@ function renderItems(container, items) {
     const buttonDisabled = isClaimed ? 'disabled' : '';
 
     div.innerHTML = `
-      <img src="${item.image_url}" alt="${item.name}">
+      <img src="${item.image_url}" alt="${item.name}" onclick="openImageModal('${item.image_url}', '${item.name}')">
       <h3>${item.name}</h3>
       <p>Date Detected: ${date}</p>
       <span class="status ${statusClass}">${statusText}</span>
@@ -138,6 +142,24 @@ async function requestClaim() {
   }
 }
 
+// Image Modal Functions
+function openImageModal(imageUrl, altText) {
+  imageModalImg.src = imageUrl;
+  imageModalImg.alt = altText;
+  imageModalImg.classList.remove('zoomed');
+  imageModal.classList.add('open');
+  imageModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeImageModal() {
+  imageModal.classList.remove('open');
+  imageModal.setAttribute('aria-hidden', 'true');
+}
+
+function toggleZoom() {
+  imageModalImg.classList.toggle('zoomed');
+}
+
 // Search functionality
 document.getElementById('searchBar').addEventListener('input', function() {
   const query = this.value.toLowerCase();
@@ -152,6 +174,11 @@ requestClaimBtn.addEventListener('click', requestClaim);
 
 // Refresh button
 document.getElementById('refreshBtn').addEventListener('click', fetchItems);
+
+// Image Modal Events
+[...document.querySelectorAll('[data-close-image-modal]')].forEach(el => el.addEventListener('click', closeImageModal));
+imageModal.addEventListener('keydown', e => { if (e.key === 'Escape') closeImageModal(); });
+imageModalImg.addEventListener('click', toggleZoom);
 
 // Load on page open
 fetchItems();
