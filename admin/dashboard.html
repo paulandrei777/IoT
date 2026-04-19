@@ -7,81 +7,185 @@
   <title>Admin Dashboard - DominiFinds</title>
   <link rel="stylesheet" href="../css/global.css">
   <link rel="stylesheet" href="../css/admin.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
   <div class="admin-layout">
-    <aside class="sidebar">
-      <h2>Admin Panel</h2>
-      <nav>
-        <a href="dashboard.html" class="active">Dashboard</a>
-        <a href="auditLogs.html">Audit Logs</a>
+    <!-- Mobile Header with Hamburger -->
+    <div class="mobile-header">
+      <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle Sidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+      <h1 class="mobile-header-title">DominiFinds Admin</h1>
+    </div>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>Admin Panel</h2>
+        <button class="sidebar-close" id="sidebarClose" aria-label="Close Sidebar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="dashboard.html" class="nav-link active">
+          <i class="fas fa-tachometer-alt"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="auditLogs.html" class="nav-link">
+          <i class="fas fa-history"></i>
+          <span>Audit Logs</span>
+        </a>
       </nav>
 
       <!-- User Profile Card -->
       <div class="user-profile-card">
         <div class="user-info">
-          <p class="user-name" id="userName">Loading...</p>
-          <p class="user-email" id="userEmail">Loading...</p>
-          <p class="user-role" id="userRole">Loading...</p>
+          <div class="user-avatar">
+            <i class="fas fa-user-circle"></i>
+          </div>
+          <div>
+            <p class="user-name" id="userName">Loading...</p>
+            <p class="user-email" id="userEmail">Loading...</p>
+            <p class="user-role" id="userRole">Loading...</p>
+          </div>
         </div>
-        <button class="btn btn-danger" id="logoutBtn">Logout</button>
+        <button class="btn btn-danger logout-btn" id="logoutBtn">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
       </div>
     </aside>
 
     <main class="admin-main">
       <header class="admin-header">
-        <h1>DominiFinds Admin Dashboard</h1>
-        <p>Review detected lost items and approve them for student viewing.</p>
+        <div class="header-content">
+          <h1>DominiFinds Admin Dashboard</h1>
+          <p>Review detected lost items and approve them for student viewing.</p>
+        </div>
       </header>
 
+      <!-- Stats Cards Section -->
       <section class="admin-cards">
         <div class="admin-card">
+          <div class="card-icon">
+            <i class="fas fa-layer-group"></i>
+          </div>
           <h3>Total Items</h3>
           <p class="value" id="totalItems">0</p>
         </div>
         <div class="admin-card">
+          <div class="card-icon pending">
+            <i class="fas fa-hourglass-half"></i>
+          </div>
           <h3>Pending Items</h3>
           <p class="value" id="pendingItems">0</p>
         </div>
         <div class="admin-card">
+          <div class="card-icon approved">
+            <i class="fas fa-check-circle"></i>
+          </div>
           <h3>Approved Items</h3>
           <p class="value" id="approvedItems">0</p>
         </div>
         <div class="admin-card">
+          <div class="card-icon claimed">
+            <i class="fas fa-hand-holding-box"></i>
+          </div>
           <h3>Claimed Items</h3>
           <p class="value" id="claimedItems">0</p>
         </div>
       </section>
 
+      <!-- Search & Controls -->
       <div class="admin-controls">
         <div class="search-group">
           <input type="text" id="searchBar" placeholder="Search items by name...">
-          <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+          <button class="btn btn-primary" id="refreshBtn">
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
         </div>
       </div>
 
+      <!-- Tabbed Item Management Section -->
       <section class="admin-section">
-        <h2>Pending Items</h2>
-        <div id="pendingContainer" class="items-grid"></div>
-      </section>
-
-      <section class="admin-section">
-        <h2>Approved Items</h2>
-        <div class="approved-controls">
-          <input type="text" id="approvedSearchBar" placeholder="Search approved items by name...">
+        <h2>Item Management</h2>
+        
+        <!-- Tab Navigation -->
+        <div class="tabs-container">
+          <div class="tabs">
+            <button class="tab-button active" data-tab="pending" data-status="pending">
+              <i class="fas fa-hourglass-half"></i>
+              <span>Pending Items</span>
+              <span class="tab-count" id="pending-count">0</span>
+            </button>
+            <button class="tab-button" data-tab="approved" data-status="approved">
+              <i class="fas fa-check-circle"></i>
+              <span>Approved Items</span>
+              <span class="tab-count" id="approved-count">0</span>
+            </button>
+            <button class="tab-button" data-tab="claimed" data-status="claimed">
+              <i class="fas fa-hand-holding-box"></i>
+              <span>Claimed Items</span>
+              <span class="tab-count" id="claimed-count">0</span>
+            </button>
+          </div>
         </div>
-        <div id="approvedContainer" class="approved-table"></div>
+
+        <!-- Tab Content -->
+        <div class="tab-content">
+          <!-- Pending Items Tab -->
+          <div id="pending-tab" class="tab-pane active">
+            <div id="pendingContainer" class="items-grid">
+              <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <h3>No Pending Items</h3>
+                <p>No items waiting for approval at the moment.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Approved Items Tab -->
+          <div id="approved-tab" class="tab-pane">
+            <div class="approved-controls">
+              <input type="text" id="approvedSearchBar" placeholder="Search approved items...">
+            </div>
+            <div id="approvedContainer" class="approved-table">
+              <div class="empty-state">
+                <i class="fas fa-check"></i>
+                <h3>No Approved Items</h3>
+                <p>No items have been approved yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Claimed Items Tab -->
+          <div id="claimed-tab" class="tab-pane">
+            <div id="claimedContainer" class="claimed-table">
+              <div class="empty-state">
+                <i class="fas fa-check-double"></i>
+                <h3>No Claimed Items</h3>
+                <p>No items have been claimed yet.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section class="admin-section">
-        <h2>Claimed Items</h2>
-        <div id="claimedContainer" class="claimed-table"></div>
-      </section>
-
+      <!-- Claim Requests Section -->
       <section class="admin-section">
         <h2>Claim Requests</h2>
-        <div id="claimRequestsContainer" class="claim-requests-table"></div>
+        <div id="claimRequestsContainer" class="claim-requests-table">
+          <div class="empty-state">
+            <i class="fas fa-list-check"></i>
+            <h3>No Pending Requests</h3>
+            <p>All claim requests have been processed.</p>
+          </div>
+        </div>
       </section>
     </main>
   </div>

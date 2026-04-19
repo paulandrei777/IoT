@@ -10,34 +10,121 @@
 </head>
 
 <body class="client-layout">
-  <header class="client-header">
-    <h1>DominiFinds</h1>
-    <p>Find your lost items here.</p>
-
-    <!-- User Profile Section -->
-    <div class="user-profile-top">
-      <div class="user-info">
-        <span class="user-name" id="userName">Loading...</span>
-        <span class="user-email" id="userEmail">Loading...</span>
-        <span class="user-role" id="userRole">Loading...</span>
+  <div class="dashboard-container">
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <h2>DominiFinds</h2>
+        <p>Lost & Found System</p>
       </div>
-      <button class="btn btn-danger" id="logoutBtn">Logout</button>
-    </div>
-  </header>
-
-  <main class="client-main container">
-    <div class="client-controls">
-      <div class="search-group">
-        <input type="text" id="searchBar" placeholder="Search items by name...">
-        <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+      <ul class="sidebar-menu">
+        <li class="menu-item active" data-section="dashboard">
+          <span class="menu-icon"><img src="../assets/images/lost-and-found.png" alt="Lost Items"></span>
+          Lost Items
+        </li>
+        <li class="menu-item" data-section="claimed">
+          <span class="menu-icon"><img src="../assets/images/double-check.png" alt="Claimed Items"></span>
+          Claimed Items
+        </li>
+        <li class="menu-item" data-section="settings">
+          <span class="menu-icon"><img src="../assets/images/settings.png" alt="Settings"></span>
+          Settings
+        </li>
+      </ul>
+      <div class="sidebar-footer">
+        <button class="btn btn-danger logout-btn" id="logoutBtn">Logout</button>
       </div>
-    </div>
+    </nav>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" tabindex="-1"></div>
 
-    <section class="items-section">
-      <h2>Available Items</h2>
-      <div id="approvedContainer" class="items-grid"></div>
-    </section>
-  </main>
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="mobile-toolbar">
+        <button class="btn btn-primary sidebar-toggle" id="sidebarToggle" type="button">
+          <span class="hamburger-icon"><img src="../assets/images/burger-bar.png" alt="Menu"></span>
+          Menu
+        </button>
+        <span class="mobile-page-title">DominiFinds</span>
+      </div>
+
+      <!-- Dashboard Section -->
+      <section id="dashboard-section" class="content-section active">
+        <header class="section-header">
+          <h1>Dashboard</h1>
+          <div class="user-welcome">
+            <span class="welcome-text">Welcome back, <span id="userName">Loading...</span></span>
+          </div>
+        </header>
+
+        <div class="controls-section">
+          <div class="search-group">
+            <input type="text" id="searchBar" placeholder="Search items by name...">
+            <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+          </div>
+        </div>
+
+        <section class="items-section">
+          <h2>Active Items</h2>
+          <p class="section-description">Items currently available for claiming</p>
+          <div id="activeItemsContainer" class="items-grid"></div>
+        </section>
+      </section>
+
+      <!-- Claimed Items Section -->
+      <section id="claimed-section" class="content-section">
+        <header class="section-header">
+          <h1>Claimed Items History</h1>
+          <p class="section-description">Items you have successfully claimed</p>
+        </header>
+
+        <div class="controls-section">
+          <div class="search-group">
+            <input type="text" id="claimedSearchBar" placeholder="Search claimed items...">
+          </div>
+        </div>
+
+        <section class="items-section">
+          <div id="claimedItemsContainer" class="items-grid"></div>
+        </section>
+      </section>
+
+      <!-- Settings Section -->
+      <section id="settings-section" class="content-section">
+        <header class="section-header">
+          <h1>Settings</h1>
+          <p class="section-description">Manage your account and preferences</p>
+        </header>
+
+        <div class="settings-content">
+          <div class="settings-card">
+            <h3>Profile Information</h3>
+            <div class="profile-info">
+              <div class="info-item">
+                <label>Full Name:</label>
+                <span id="settingsFullName">Loading...</span>
+              </div>
+              <div class="info-item">
+                <label>Email:</label>
+                <span id="settingsEmail">Loading...</span>
+              </div>
+              <div class="info-item">
+                <label>Role:</label>
+                <span id="settingsRole">Loading...</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <h3>Account Actions</h3>
+            <div class="settings-actions">
+              <a href="#" class="forgot-password-link">Forgot Password?</a>
+              <button class="btn btn-danger" id="settingsLogoutBtn">Logout</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <!-- Claim Request Modal -->
   <div id="claimModal" class="modal" aria-hidden="true">

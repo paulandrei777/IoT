@@ -1,6 +1,8 @@
 const API_URL = "http://localhost:5000/api/items";
 
 let allItems = [];
+let activeItems = [];
+let claimedItems = [];
 
 // Modal state
 const claimModal = document.getElementById('claimModal');
@@ -15,12 +17,25 @@ let activeItemId = null;
 const imageModal = document.getElementById('imageModal');
 const imageModalImg = document.getElementById('imageModalImg');
 
-// Fetch all items
+// Sidebar toggle state
+const sidebarToggle = document.getElementById('sidebarToggle');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+
+// Navigation state
+let currentSection = 'dashboard';
+
+// Fetch all items and categorize them
 async function fetchItems() {
   try {
     const res = await fetch(API_URL);
     allItems = await res.json();
-    renderApprovedItems();
+
+    // Categorize items
+    activeItems = allItems.filter(item => item.status === 'approved');
+    claimedItems = allItems.filter(item => item.status === 'claimed');
+
+    renderActiveItems();
+    renderClaimedItems();
   } catch (error) {
     console.error('Error fetching items:', error);
   }
@@ -44,35 +59,51 @@ async function loadUserProfile() {
             return;
         }
 
+        // Update dashboard welcome
         document.getElementById('userName').textContent = profile.full_name || 'Unknown';
-        document.getElementById('userEmail').textContent = profile.email || 'No email';
-        document.getElementById('userRole').textContent = profile.role || 'No role';
 
-        // Attach logout handler
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', async () => {
+        // Update settings profile info
+        document.getElementById('settingsFullName').textContent = profile.full_name || 'Unknown';
+        document.getElementById('settingsEmail').textContent = profile.email || 'No email';
+        document.getElementById('settingsRole').textContent = profile.role || 'No role';
+
+        // Attach logout handlers
+        const logoutBtns = document.querySelectorAll('#logoutBtn, #settingsLogoutBtn');
+        logoutBtns.forEach(btn => {
+            btn.addEventListener('click', async () => {
                 await logout();
             });
-        }
+        });
     } catch (error) {
         console.error('Error loading user profile:', error);
         window.location.href = loginPagePath();
     }
 }
 
-// Render approved/claimed items
-function renderApprovedItems() {
-  const container = document.getElementById('approvedContainer');
-  const filteredItems = allItems.filter(item => ['approved', 'claimed'].includes(item.status));
-  renderItems(container, filteredItems);
+// Render active items
+function renderActiveItems(searchQuery = '') {
+  const container = document.getElementById('activeItemsContainer');
+  const filteredItems = activeItems.filter(item =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  renderItems(container, filteredItems, 'active');
+}
+
+// Render claimed items
+function renderClaimedItems(searchQuery = '') {
+  const container = document.getElementById('claimedItemsContainer');
+  const filteredItems = claimedItems.filter(item =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  renderItems(container, filteredItems, 'claimed');
 }
 
 // Generic render function
-function renderItems(container, items) {
+function renderItems(container, items, type = 'active') {
   container.innerHTML = '';
   if (items.length === 0) {
-    container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No items available</p>';
+    const message = type === 'active' ? 'No active items available' : 'No claimed items found';
+    container.innerHTML = `<p style="text-align: center; padding: 40px; color: var(--gray-600); font-style: italic;">${message}</p>`;
     return;
   }
   items.forEach(item => {
@@ -80,12 +111,15 @@ function renderItems(container, items) {
     div.className = 'item-card';
     const date = new Date(item.created_at).toLocaleDateString();
     const isClaimed = item.status === 'claimed';
-    const statusText = isClaimed ? 'Claimed' : 'Approved';
+    const statusText = isClaimed ? 'Claimed' : 'Available';
     const statusClass = `status-${item.status}`;
     const buttonText = isClaimed ? 'Claimed' : 'Claim Item';
     const buttonDisabled = isClaimed ? 'disabled' : '';
 
     div.innerHTML = `
+      <div class="item-card-head">
+        <span class="item-status-badge ${item.status}">${statusText}</span>
+      </div>
       <img src="${item.image_url}" alt="${item.name}" onclick="openImageModal('${item.image_url}', '${item.name}')">
       <h3>${item.name}</h3>
       <p>Date Detected: ${date}</p>
@@ -93,6 +127,60 @@ function renderItems(container, items) {
       <button class="claim-btn" ${buttonDisabled} onclick="openClaimModal('${item.id}')">${buttonText}</button>
     `;
     container.appendChild(div);
+  });
+}
+
+// Navigation functions
+function switchSection(sectionName) {
+  // Update navigation
+  document.querySelectorAll('.menu-item').forEach(item => {
+    item.classList.remove('active');
+  });
+  document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
+
+  // Update content sections
+  document.querySelectorAll('.content-section').forEach(section => {
+    section.classList.remove('active');
+  });
+  document.getElementById(`${sectionName}-section`).classList.add('active');
+
+  currentSection = sectionName;
+}
+
+// Initialize navigation
+function openSidebar() {
+  document.querySelector('.dashboard-container').classList.add('sidebar-open');
+}
+
+function closeSidebar() {
+  document.querySelector('.dashboard-container').classList.remove('sidebar-open');
+}
+
+function toggleSidebar() {
+  document.querySelector('.dashboard-container').classList.toggle('sidebar-open');
+}
+
+function initNavigation() {
+  document.querySelectorAll('.menu-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const section = item.dataset.section;
+      switchSection(section);
+      closeSidebar();
+    });
+  });
+
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener('click', toggleSidebar);
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeSidebar);
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeSidebar();
+    }
   });
 }
 
@@ -195,11 +283,16 @@ function toggleZoom() {
   imageModalImg.classList.toggle('zoomed');
 }
 
-// Search functionality
+// Search functionality for active items
 document.getElementById('searchBar').addEventListener('input', function() {
-  const query = this.value.toLowerCase();
-  const filtered = allItems.filter(item => item.name.toLowerCase().includes(query) && ['approved', 'claimed'].includes(item.status));
-  renderItems(document.getElementById('approvedContainer'), filtered);
+  const query = this.value;
+  renderActiveItems(query);
+});
+
+// Search functionality for claimed items
+document.getElementById('claimedSearchBar').addEventListener('input', function() {
+  const query = this.value;
+  renderClaimedItems(query);
 });
 
 // Modal close & confirm
@@ -215,6 +308,7 @@ document.getElementById('refreshBtn').addEventListener('click', fetchItems);
 imageModal.addEventListener('keydown', e => { if (e.key === 'Escape') closeImageModal(); });
 imageModalImg.addEventListener('click', toggleZoom);
 
-// Load on page open
+// Initialize app
+initNavigation();
 loadUserProfile();
 fetchItems();

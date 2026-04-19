@@ -7,9 +7,13 @@ let claimRequests = [];
 
 // Initialize based on page
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize mobile menu on all admin pages
+    setupMobileMenu();
+    loadUserProfile();
+
     if (document.getElementById('pendingContainer')) {
         // Dashboard page
-        loadUserProfile();
+        setupTabSwitching(); // Initialize tab switching
         fetchItems();
         fetchClaimRequests();
         setupDashboardEventListeners();
@@ -21,10 +25,61 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     if (document.getElementById('logs-tbody')) {
         // Audit Logs page
-        loadUserProfile();
         fetchLogs();
     }
 });
+
+// Setup mobile hamburger menu
+function setupMobileMenu() {
+    const hamburgerBtn = document.getElementById('hamburgerBtn');
+    const sidebarClose = document.getElementById('sidebarClose');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const sidebar = document.getElementById('sidebar');
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    // Only setup if hamburger exists (mobile layout)
+    if (hamburgerBtn && sidebar && sidebarOverlay) {
+        // Open sidebar
+        hamburgerBtn.addEventListener('click', () => {
+            sidebar.classList.add('open');
+            sidebarOverlay.classList.add('active');
+        });
+
+        // Close sidebar button
+        if (sidebarClose) {
+            sidebarClose.addEventListener('click', () => {
+                closeMobileMenu();
+            });
+        }
+
+        // Close on overlay click
+        sidebarOverlay.addEventListener('click', () => {
+            closeMobileMenu();
+        });
+
+        // Close on nav link click
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                closeMobileMenu();
+            });
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeMobileMenu();
+            }
+        });
+    }
+}
+
+// Close mobile menu
+function closeMobileMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+}
 
 // Fetch all items from backend
 async function fetchItems() {
@@ -108,10 +163,22 @@ async function fetchClaimRequests() {
 
 // Render all dashboard sections
 function renderDashboard() {
+    clearAllContainers(); // Clear containers before rendering to prevent duplication
     updateStatistics();
     renderPendingItems();
     renderApprovedItems();
     renderClaimedItems();
+}
+
+// Clear all item containers to prevent content stacking/duplication
+function clearAllContainers() {
+    const pendingContainer = document.getElementById('pendingContainer');
+    const approvedContainer = document.getElementById('approvedContainer');
+    const claimedContainer = document.getElementById('claimedContainer');
+
+    if (pendingContainer) pendingContainer.innerHTML = '';
+    if (approvedContainer) approvedContainer.innerHTML = '';
+    if (claimedContainer) claimedContainer.innerHTML = '';
 }
 
 // Update dashboard statistics
@@ -125,18 +192,100 @@ function updateStatistics() {
     document.getElementById('pendingItems').textContent = pending;
     document.getElementById('approvedItems').textContent = approved;
     document.getElementById('claimedItems').textContent = claimed;
+
+    // Update tab counts
+    document.getElementById('pending-count').textContent = pending;
+    document.getElementById('approved-count').textContent = approved;
+    document.getElementById('claimed-count').textContent = claimed;
+}
+
+// Setup tab switching functionality
+function setupTabSwitching() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.getAttribute('data-tab');
+            
+            // Remove active class from all buttons and panes
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+
+            // Add active class to clicked button and corresponding pane
+            button.classList.add('active');
+            const activePane = document.getElementById(`${tabName}-tab`);
+            if (activePane) {
+                activePane.classList.add('active');
+                
+                // Clear and render the tab content
+                clearAndRenderTab(tabName);
+            }
+            
+            // Close mobile menu if open
+            closeMobileMenu();
+        });
+    });
+}
+
+// Clear container and render tab content based on status
+function clearAndRenderTab(status) {
+    let container;
+    
+    if (status === 'pending') {
+        container = document.getElementById('pendingContainer');
+        if (container) {
+            container.innerHTML = '';
+            renderPendingItems();
+        }
+    } else if (status === 'approved') {
+        container = document.getElementById('approvedContainer');
+        if (container) {
+            container.innerHTML = '';
+            renderApprovedItems();
+        }
+    } else if (status === 'claimed') {
+        container = document.getElementById('claimedContainer');
+        if (container) {
+            container.innerHTML = '';
+            renderClaimedItems();
+        }
+    }
+}
+
+// Show empty state message for a container
+function showEmptyState(container, icon, title, message) {
+    container.innerHTML = `
+        <div class="empty-state">
+            <i class="fas ${icon}"></i>
+            <h3>${title}</h3>
+            <p>${message}</p>
+        </div>
+    `;
 }
 
 // Render items by status
 function renderPendingItems(filteredItems = null) {
     const items = filteredItems ? filteredItems.filter(i => i.status === 'pending') : allItems.filter(i => i.status === 'pending');
     const container = document.getElementById('pendingContainer');
+    
+    if (!items || items.length === 0) {
+        showEmptyState(container, 'fa-inbox', 'No Pending Items', 'No items waiting for approval at the moment.');
+        return;
+    }
+    
     renderItems(container, items, true);
 }
 
 function renderApprovedItems(filteredItems = null) {
     const items = filteredItems ? filteredItems.filter(i => i.status === 'approved') : allItems.filter(i => i.status === 'approved');
     const container = document.getElementById('approvedContainer');
+    
+    if (!items || items.length === 0) {
+        showEmptyState(container, 'fa-check', 'No Approved Items', 'No items have been approved yet.');
+        return;
+    }
+    
     renderApprovedItemsTable(container, items);
 }
 
@@ -144,6 +293,12 @@ function renderApprovedItems(filteredItems = null) {
 function renderClaimedItems() {
     const items = allItems.filter(i => i.status === 'claimed');
     const container = document.getElementById('claimedContainer');
+    
+    if (!items || items.length === 0) {
+        showEmptyState(container, 'fa-check-double', 'No Claimed Items', 'No items have been claimed yet.');
+        return;
+    }
+    
     renderClaimedItemsTable(container, items);
 }
 
@@ -153,7 +308,7 @@ function renderClaimRequests() {
     container.innerHTML = '';
 
     if (!claimRequests.length) {
-        container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No pending claim requests</p>';
+        showEmptyState(container, 'fa-list-check', 'No Pending Requests', 'All claim requests have been processed.');
         return;
     }
 

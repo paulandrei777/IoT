@@ -1,9 +1,7 @@
-// Supabase client helper for login and role-based routing
-
+// Supabase client helper
 const SUPABASE_URL = 'https://oytfdethkubdbgnvgexr.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dGZkZXRoa3ViZGJnbnZnZXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTcwNjYsImV4cCI6MjA4ODg5MzA2Nn0.yIhA3RXuAEtf7ZRthJQQ9JabsOn65XWH1HV7slp1TrU'; // replace with your anon key
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dGZkZXRoa3ViZGJnbnZnZXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTcwNjYsImV4cCI6MjA4ODg5MzA2Nn0.yIhA3RXuAEtf7ZRthJQQ9JabsOn65XWH1HV7slp1TrU';
 
-// ✅ FIX: do NOT overwrite "supabase"
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function loginPagePath() {
@@ -13,13 +11,8 @@ function loginPagePath() {
   return '/client/login.html';
 }
 
-function studentDashboardPath() {
-  return '../client/home.html';
-}
-
-function adminDashboardPath() {
-  return '../admin/dashboard.html';
-}
+function studentDashboardPath() { return '../client/home.html'; }
+function adminDashboardPath() { return '../admin/dashboard.html'; }
 
 // -------------------- PROFILE --------------------
 
@@ -41,45 +34,28 @@ async function loginWithEmail(email, password) {
     email,
     password,
   });
-
   if (error) throw error;
-
   return data;
 }
 
 // -------------------- REGISTER --------------------
 
 async function signUpWithEmail(fullName, email, password) {
+  // Dito natin ipinapasa ang fullName sa metadata
   const { data, error } = await supabaseClient.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        full_name: fullName
+      }
+    }
   });
 
   if (error) throw error;
 
-  const userId = data?.user?.id;
-  if (!userId) throw new Error('Signup successful but user ID missing.');
-
-  await createProfile(userId, fullName, email);
-
-  return data;
-}
-
-async function createProfile(userId, fullName, email) {
-  const { data, error } = await supabaseClient
-    .from('profiles')
-    .insert([
-      {
-        id: userId,
-        full_name: fullName,
-        email: email,
-        role: 'student',
-        created_at: new Date().toISOString(),
-      },
-    ]);
-
-  if (error) throw error;
-
+  // TANDAAN: Wala na dapat createProfile() dito dahil 
+  // ang Database Trigger (handle_new_user) na ang bahala sa profiles table.
   return data;
 }
 

@@ -7,53 +7,93 @@
   <title>Admin - Audit Logs</title>
   <link rel="stylesheet" href="../css/global.css">
   <link rel="stylesheet" href="../css/admin.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
   <div class="admin-layout">
-    <aside class="sidebar">
-      <h2>Admin Panel</h2>
-      <nav>
-        <a href="dashboard.html">Dashboard</a>
-        <a href="auditLogs.html" class="active">Audit Logs</a>
+    <!-- Mobile Header with Hamburger -->
+    <div class="mobile-header">
+      <button class="hamburger-btn" id="hamburgerBtn" aria-label="Toggle Sidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+      <h1 class="mobile-header-title">DominiFinds Admin</h1>
+    </div>
+
+    <!-- Sidebar Overlay for Mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <h2>Admin Panel</h2>
+        <button class="sidebar-close" id="sidebarClose" aria-label="Close Sidebar">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="dashboard.html" class="nav-link">
+          <i class="fas fa-tachometer-alt"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="auditLogs.html" class="nav-link active">
+          <i class="fas fa-history"></i>
+          <span>Audit Logs</span>
+        </a>
       </nav>
 
       <!-- User Profile Card -->
       <div class="user-profile-card">
         <div class="user-info">
-          <p class="user-name" id="userName">Loading...</p>
-          <p class="user-email" id="userEmail">Loading...</p>
-          <p class="user-role" id="userRole">Loading...</p>
+          <div class="user-avatar">
+            <i class="fas fa-user-circle"></i>
+          </div>
+          <div>
+            <p class="user-name" id="userName">Loading...</p>
+            <p class="user-email" id="userEmail">Loading...</p>
+            <p class="user-role" id="userRole">Loading...</p>
+          </div>
         </div>
-        <button class="btn btn-danger" id="logoutBtn">Logout</button>
+        <button class="btn btn-danger logout-btn" id="logoutBtn">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </button>
       </div>
     </aside>
 
+    <!-- Main Content -->
     <main class="admin-main">
       <header class="admin-header">
-        <h1>Audit Logs</h1>
-        <p>View all item approval, rejection, and claim activities.</p>
+        <div class="header-content">
+          <h1>Audit Logs</h1>
+          <p>View all item approval, rejection, and claim activities.</p>
+        </div>
       </header>
 
       <section class="admin-section">
-        <div id="logs-container">
-          <table class="admin-table audit-log-table">
-            <thead>
-              <tr>
-                <th>Log ID</th>
-                <th>Item ID</th>
-                <th>Action</th>
-                <th>Performed By</th>
-                <th>Date / Time</th>
-              </tr>
-            </thead>
-            <tbody id="logs-tbody">
-              <!-- Logs will be inserted here -->
-            </tbody>
-          </table>
-          <div id="no-logs" class="no-logs"
-            style="text-align: center; padding: 40px; color: var(--gray-600); font-style: italic; display: none;">No
-            logs available</div>
+        <h2>Activity Log</h2>
+        <div class="logs-wrapper">
+          <div id="logs-container" class="logs-container">
+            <table class="admin-table audit-log-table">
+              <thead>
+                <tr>
+                  <th>Log ID</th>
+                  <th>Item ID</th>
+                  <th>Action</th>
+                  <th>Performed By</th>
+                  <th>Date / Time</th>
+                </tr>
+              </thead>
+              <tbody id="logs-tbody">
+                <!-- Logs will be inserted here -->
+              </tbody>
+            </table>
+            <div id="no-logs" class="empty-state" style="display: none;">
+              <i class="fas fa-inbox"></i>
+              <h3>No Logs Available</h3>
+              <p>There are no activity logs to display at the moment.</p>
+            </div>
+          </div>
         </div>
       </section>
     </main>
