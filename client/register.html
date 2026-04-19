@@ -11,7 +11,7 @@
 <body>
   <div class="auth-container">
     <div class="auth-brand">
-      <h1>DominiFinds</h1>
+      <img src="../assets/images/domini.png" alt="" class="auth-logo">
       <p>Smart Lost & Found System</p>
     </div>
 
@@ -36,8 +36,13 @@
 
         <div class="field-group">
           <label for="password">Password</label>
-          <input type="password" id="password" name="password" placeholder="Create a password" required
-            autocomplete="new-password" />
+          <div class="password-wrapper">
+            <input type="password" id="password" name="password" placeholder="Create a password" required
+              autocomplete="new-password" />
+            <button type="button" class="password-toggle">
+              <img src="../assets/icons/show.png" class="eye-icon" alt="Toggle Password">
+            </button>
+          </div>
         </div>
 
         <button type="submit" class="auth-button">Create Account</button>
@@ -91,6 +96,7 @@
     });
 
     document.addEventListener("DOMContentLoaded", async () => {
+      initPasswordToggle();
       await checkSessionAndRedirect();
     });
   </script>

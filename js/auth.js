@@ -77,6 +77,7 @@ async function redirectBasedOnRole(userId) {
   }
 }
 
+
 // -------------------- SESSION CHECK --------------------
 
 async function checkSessionAndRedirect() {
@@ -102,3 +103,25 @@ window.checkSessionAndRedirect = checkSessionAndRedirect;
 window.loginWithEmail = loginWithEmail;
 window.signUpWithEmail = signUpWithEmail;
 window.redirectBasedOnRole = redirectBasedOnRole;
+window.initPasswordToggle = initPasswordToggle;
+
+// -------------------- PASSWORD TOGGLE --------------------
+
+function initPasswordToggle() {
+document.querySelector('.password-toggle').addEventListener('click', function() {
+  const input = this.parentElement.querySelector('input');
+  const img = this.querySelector('.eye-icon');
+  
+  // Dito mo ilagay ang exact file path ng dalawang icons mo
+  const hideIcon = '../assets/icons/hide.png';
+  const showIcon = '../assets/icons/show.png';
+  
+  if (input.type === 'password') {
+    input.type = 'text';
+    img.src = showIcon; // Palit sa "Open Eye"
+  } else {
+    input.type = 'password';
+    img.src = hideIcon; // Balik sa "Closed Eye"
+  }
+});
+}

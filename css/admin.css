@@ -198,6 +198,11 @@ body {
   flex: 1;
 }
 
+.logo-image {
+  width: 120px;
+  height: auto;
+}
+
 /* Sidebar Overlay */
 .sidebar-overlay {
   display: none;
@@ -312,6 +317,11 @@ body {
   height: 50px;
 }
 
+.card-icon img {
+  width: 40px;
+  height: 40px;
+}
+
 .card-icon.pending {
   color: #F57F17;
   background: rgba(245, 127, 23, 0.1);
@@ -413,6 +423,13 @@ body {
 
 .tab-button i {
   font-size: 1rem;
+}
+
+.tab-icon {
+  width: 16px;
+  height: 16px;
+  position: relative;
+  top: 2px;
 }
 
 .tab-button:hover {
@@ -1292,7 +1309,7 @@ body {
     font-size: 0.8rem;
   }
 }
-  }
+  
 
   .admin-section h2 {
     font-size: 1.1rem;
@@ -1334,4 +1351,3 @@ body {
     padding: 8px 10px;
     font-size: 0.8rem;
   }
-}
