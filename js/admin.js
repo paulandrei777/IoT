@@ -4,6 +4,8 @@ const API_LOGS_URL = "http://localhost:5000/api/item-logs";
 let allItems = [];
 let allLogs = [];
 let claimRequests = [];
+let activeModalItemId = null;
+let activeModalImageUrl = null;
 
 // Initialize based on page
 document.addEventListener('DOMContentLoaded', function() {
@@ -375,13 +377,19 @@ function renderItems(container, items, showButtons = false) {
         const div = document.createElement('div');
         div.className = 'item-card';
         const date = new Date(item.created_at).toLocaleString();
+        // If item.display_name exists, display it; else fallback to item.name (filename)
+        const displayName = item.display_name ? item.display_name : item.name;
+        // Add ai_description display if available
+        const description = item.ai_description ? `<p>${item.ai_description}</p>` : '';
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${item.name}" onerror="this.src='../uploads/default.png'">
-            <h3>${item.name}</h3>
+            <img src="${item.image_url}" alt="${displayName}" onerror="this.src='../uploads/default.png'">
+            <h3>${displayName}</h3>
+            ${description}
             <p>Date Detected: ${date}</p>
             <span class="status status-${item.status}">${capitalize(item.status)}</span>
             ${showButtons ? `
                 <div class="actions">
+                    <button class="btn btn-secondary" onclick="openPendingItemModal('${item.id}')">Review</button>
                     <button class="btn btn-success" onclick="approveItem('${item.id}')">Approve</button>
                     <button class="btn btn-danger" onclick="rejectItem('${item.id}')">Reject</button>
                 </div>
@@ -402,9 +410,12 @@ function renderApprovedItemsTable(container, items) {
         const div = document.createElement('div');
         div.className = 'approved-item';
         const date = new Date(item.created_at).toLocaleDateString();
+        const displayName = item.display_name || item.name;
+        const description = item.ai_description ? `<p class="approved-description">${item.ai_description}</p>` : '<p class="approved-description muted">No description available</p>';
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${item.name}" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'">
-            <h4>${item.name}</h4>
+            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='../uploads/default.png'">
+            <h4>${displayName}</h4>
+            ${description}
             <p>Approved: ${date}</p>
             <span class="status status-approved">Approved</span>
         `;
@@ -424,10 +435,11 @@ function renderClaimedItemsTable(container, items) {
         div.className = 'claimed-item';
         const claimedBy = item.claimed_by || 'Unknown';
         const dateClaimed = item.claimed_date ? new Date(item.claimed_date).toLocaleDateString() : new Date(item.created_at).toLocaleDateString();
+        const displayName = item.display_name || item.name;
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${item.name}" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='../uploads/default.png'">
             <div>
-                <h4>${item.name}</h4>
+                <h4>${displayName}</h4>
                 <p>Claimed by: ${claimedBy}</p>
                 <p>Date: ${dateClaimed}</p>
                 <span class="status status-claimed">Claimed</span>
@@ -614,12 +626,142 @@ function closeLightbox() {
     lightbox.classList.remove('active');
 }
 
-// Close lightbox on escape key
+// Close lightbox and modal on escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeLightbox();
+        closeItemActionModal();
     }
 });
+
+function openPendingItemModal(itemId) {
+    const item = allItems.find(i => i.id === itemId);
+    if (!item) {
+        console.error('Item not found for modal:', itemId);
+        return;
+    }
+
+    console.log('Opening modal for item:', item); // Debug: check item object
+
+    activeModalItemId = itemId;
+    activeModalImageUrl = item.image_url;
+    const modal = document.getElementById('itemActionModal');
+    const img = document.getElementById('modalItemImage');
+    const nameInput = document.getElementById('modalItemName');
+    const descriptionInput = document.getElementById('modalItemDescription');
+    const statusText = document.getElementById('modalItemStatus');
+
+    img.src = item.image_url;
+    img.alt = item.display_name || item.name || 'Pending item';
+    // Correctly map display_name to Item Name input, fallback to name (filename)
+    nameInput.value = item.display_name || item.name || '';
+    // Correctly map ai_description to Description textarea
+    descriptionInput.value = item.ai_description || '';
+    statusText.textContent = `Status: ${capitalize(item.status)}`;
+
+    modal.classList.add('active');
+}
+
+function closeItemActionModal() {
+    const modal = document.getElementById('itemActionModal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    activeModalItemId = null;
+}
+
+async function autoDescribeItem() {
+    if (!activeModalItemId || !activeModalImageUrl) return;
+    const button = document.getElementById('autoDescribeBtn');
+    button.disabled = true;
+    button.textContent = 'Loading...';
+
+    try {
+        const res = await fetch('/api/analyze-item', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                id: activeModalItemId,
+                image_url: activeModalImageUrl
+            })
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            throw new Error(errorData?.error || 'AI analysis failed');
+        }
+
+        const json = await res.json();
+        document.getElementById('modalItemName').value = json.display_name || '';
+        document.getElementById('modalItemDescription').value = json.ai_description || '';
+
+        const localItem = allItems.find(i => i.id === activeModalItemId);
+        if (localItem) {
+            localItem.display_name = json.display_name;
+            localItem.ai_description = json.ai_description;
+            localItem.is_ai_processed = true;
+        }
+
+        showSuccess('AI description loaded. Edit if needed, then approve.');
+    } catch (error) {
+        console.error('AI analysis failed:', error);
+        alert('AI analysis failed: ' + (error.message || 'Server error'));
+    } finally {
+        button.disabled = false;
+        button.textContent = 'Auto-Describe with AI';
+    }
+}
+
+async function approveModalItem() {
+    if (!activeModalItemId) return;
+    const itemName = document.getElementById('modalItemName').value.trim();
+    const itemDescription = document.getElementById('modalItemDescription').value.trim();
+
+    console.log('Approving item with data:', { itemName, itemDescription }); // Debug: check input values
+
+    try {
+        const res = await fetch(`${API_ITEMS_URL}/${activeModalItemId}/approve`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                display_name: itemName,
+                ai_description: itemDescription,
+                is_ai_processed: true
+            })
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            throw new Error(errorData?.error || 'Approval failed');
+        }
+
+        const result = await res.json();
+        const localItem = allItems.find(i => i.id === activeModalItemId);
+        if (localItem) {
+            localItem.status = 'approved';
+            localItem.display_name = itemName;
+            localItem.ai_description = itemDescription;
+            localItem.is_ai_processed = true;
+        }
+
+        await logAction(activeModalItemId, 'approve');
+        renderDashboard();
+        closeItemActionModal();
+        showSuccess('Item approved successfully.');
+    } catch (error) {
+        console.error('Approve modal item failed:', error);
+        showError(error.message || 'Failed to approve item.');
+    }
+}
+
+async function rejectModalItem() {
+    if (!activeModalItemId) return;
+    await rejectItem(activeModalItemId);
+    closeItemActionModal();
+}
 
 // Utility functions
 function getBadgeClass(action) {

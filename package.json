@@ -11,6 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google/generative-ai": "^0.8.0",
     "@supabase/supabase-js": "^2.99.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",

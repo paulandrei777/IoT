@@ -115,13 +115,18 @@ function renderItems(container, items, type = 'active') {
     const statusClass = `status-${item.status}`;
     const buttonText = isClaimed ? 'Claimed' : 'Claim Item';
     const buttonDisabled = isClaimed ? 'disabled' : '';
+    // If item.display_name exists, display it; else fallback to item.name (filename)
+    const displayName = item.display_name ? item.display_name : item.name;
+    // Add ai_description display if available
+    const description = item.ai_description ? `<p>${item.ai_description}</p>` : '';
 
     div.innerHTML = `
       <div class="item-card-head">
         <span class="item-status-badge ${item.status}">${statusText}</span>
       </div>
-      <img src="${item.image_url}" alt="${item.name}" onclick="openImageModal('${item.image_url}', '${item.name}')">
-      <h3>${item.name}</h3>
+      <img src="${item.image_url}" alt="${displayName}" onclick="openImageModal('${item.image_url}', '${displayName}')">
+      <h3>${displayName}</h3>
+      ${description}
       <p>Date Detected: ${date}</p>
       <span class="status ${statusClass}">${statusText}</span>
       <button class="claim-btn" ${buttonDisabled} onclick="openClaimModal('${item.id}')">${buttonText}</button>

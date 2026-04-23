@@ -1,5 +1,40 @@
 // server/controllers/itemController.js
 const supabase = require('../config/supabaseClient');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+const fetchFn = global.fetch || (() => {
+  throw new Error('Fetch is not available in this Node.js runtime. Please use Node 18+ or install a compatible fetch implementation.');
+});
+
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error('GEMINI_API_KEY is missing in .env');
+}
+
+const aiClient = new GoogleGenerativeAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
+const extractAiText = (response) => {
+  if (!response) return '';
+  if (typeof response.output_text === 'string' && response.output_text.trim()) {
+    return response.output_text.trim();
+  }
+
+  const outputs = response.output || [];
+  const firstOutput = Array.isArray(outputs) ? outputs[0] : outputs;
+  const contents = firstOutput?.content || [];
+  const textPieces = [];
+
+  for (const block of contents) {
+    if (block?.type === 'text' && block?.text) {
+      textPieces.push(block.text);
+    } else if (typeof block === 'string') {
+      textPieces.push(block);
+    }
+  }
+
+  return textPieces.join(' ').trim();
+};
 
 // Upload an item (base64 from IoT device or client)
 const uploadItem = async (req, res) => {
@@ -48,13 +83,124 @@ const getItems = async (req, res) => {
   }
 };
 
+// Analyze a pending item image with Gemini AI and update metadata
+const analyzeItem = async (req, res) => {
+  const { id, image_url: inputImageUrl } = req.body;
+  console.log('[analyzeItem] request received', { id, image_url: inputImageUrl });
+
+  if (!id) {
+    console.log('[analyzeItem] missing item id');
+    return res.status(400).json({ error: 'Item id is required' });
+  }
+
+  try {
+    const { data: itemData, error: itemError } = await supabase
+      .from('items')
+      .select('image_url, name')
+      .eq('id', id)
+      .single();
+
+    if (itemError || !itemData) {
+      console.log('[analyzeItem] item lookup failed', { itemError });
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const imageUrl = inputImageUrl || itemData.image_url;
+    console.log('[analyzeItem] using imageUrl', imageUrl);
+    if (!imageUrl) {
+      console.log('[analyzeItem] missing image URL');
+      return res.status(400).json({ error: 'Item image URL is missing' });
+    }
+
+    const imageResponse = await fetchFn(imageUrl);
+    console.log('[analyzeItem] fetched image status', imageResponse.status);
+    if (!imageResponse.ok) {
+      throw new Error(`Unable to fetch image from storage: ${imageResponse.status} ${imageResponse.statusText}`);
+    }
+
+    const prompt = 'Analyze this lost item image. Return a JSON object with two fields: "display_name" (concise item name) and "ai_description" (physical description). Do not add any conversational text.';
+    console.log('[analyzeItem] sending request to Gemini', { prompt, model: 'models/gemini-1.5-flash' });
+
+    const aiResponse = await aiClient.responses.create({
+      model: 'models/gemini-1.5-flash',
+      input: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image', image_uri: imageUrl },
+          ],
+        },
+      ],
+      temperature: 0.0,
+      generationConfig: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    console.log('[analyzeItem] raw Gemini response', JSON.stringify(aiResponse));
+    const responseText = extractAiText(aiResponse);
+    console.log('[analyzeItem] extracted AI text', responseText);
+
+    const jsonMatch = responseText.match(/{[\s\S]*}/);
+    if (!jsonMatch) {
+      console.log('[analyzeItem] no JSON found in responseText');
+      throw new Error('AI response did not contain valid JSON');
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.log('[analyzeItem] JSON parse failed', parseError);
+      throw new Error('AI response contained malformed JSON');
+    }
+
+    const displayName = parsed.display_name?.trim() || itemData.name;
+    const aiDescription = parsed.ai_description?.trim() || '';
+    console.log('[analyzeItem] parsed output', { displayName, aiDescription });
+
+    const { data: updatedItem, error: updateError } = await supabase
+      .from('items')
+      .update({
+        display_name: displayName,
+        ai_description: aiDescription,
+        is_ai_processed: true,
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.log('[analyzeItem] supabase update failed', updateError);
+      throw updateError;
+    }
+
+    console.log('[analyzeItem] updated item', updatedItem);
+    res.json({
+      display_name: displayName,
+      ai_description: aiDescription,
+      item: updatedItem,
+    });
+  } catch (err) {
+    console.error('[analyzeItem] AI analysis error', err);
+    res.status(500).json({ error: err.message || 'AI analysis failed' });
+  }
+};
+
 // Approve an item (Admin)
 const approveItem = async (req, res) => {
   const { id } = req.params;
+  const { display_name, ai_description, is_ai_processed } = req.body;
   try {
+    const updateData = { status: 'approved' };
+    if (display_name !== undefined) updateData.display_name = display_name;
+    if (ai_description !== undefined) updateData.ai_description = ai_description;
+    if (is_ai_processed === true) updateData.is_ai_processed = true;
+
     const { data, error } = await supabase
       .from('items')
-      .update({ status: 'approved' })
+      .update(updateData)
       .eq('id', id)
       .eq('status', 'pending')
       .select();
@@ -279,6 +425,7 @@ const rejectClaim = async (req, res) => {
 module.exports = {
   uploadItem,
   getItems,
+  analyzeItem,
   approveItem,
   rejectItem,
   claimItem,

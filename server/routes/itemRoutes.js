@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { uploadItem, getItems, approveItem, rejectItem, claimItem, requestClaim, getClaimRequests, approveClaim, rejectClaim } = require('../controllers/itemController');
+const { uploadItem, getItems, analyzeItem, approveItem, rejectItem, claimItem, requestClaim, getClaimRequests, approveClaim, rejectClaim } = require('../controllers/itemController');
 
 // Existing routes
 router.post('/upload', uploadItem);
 router.get('/', getItems);
+router.post('/:id/analyze', analyzeItem);
 
 // Admin actions
 router.patch('/:id/approve', approveItem);

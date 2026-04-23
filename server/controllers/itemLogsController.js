@@ -17,7 +17,6 @@ const getItemLogs = async (req, res) => {
 
 const createItemLog = async (req, res) => {
   try {
-    const { item_id, action, performed_by, timestamp } = req.body;
 
     const { data, error } = await supabase
       .from('item_logs')
