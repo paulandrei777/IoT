@@ -25,14 +25,14 @@ body {
 .sidebar {
   width: 280px;
   background: var(--white);
-  border-right: 1px solid var(--gray-200);
+  border: 1px solid var(--gray-200);
   padding: 0;
   position: fixed;
   top: 0;
   left: 0;
   height: 100vh;
   overflow-y: auto;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -93,6 +93,7 @@ body {
 .nav-link:hover {
   background-color: var(--gray-50);
   color: var(--red);
+  box-shadow: var(--shadow-sm);
 }
 
 .nav-link.active {
@@ -278,7 +279,7 @@ body {
   background: var(--white);
   border-radius: var(--radius-lg);
   padding: 24px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--gray-200);
   transition: all 0.3s ease;
   position: relative;
@@ -511,6 +512,78 @@ body {
   color: var(--gray-500);
   margin: 0;
   font-size: 0.95rem;
+}
+
+/* Item Containers */
+.items-grid, .approved-table, .claimed-table {
+  background: #f9f9f9;
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+
+/* Item Cards */
+.item-card, .approved-item, .claimed-item {
+  background: var(--white);
+  border: 1px solid #e0e0e0;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.item-card:hover, .approved-item:hover, .claimed-item:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: var(--gray-400);
+  transform: translateY(-1px);
+}
+
+.item-card img, .approved-item img, .claimed-item img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.item-card h3, .approved-item h4, .claimed-item h4 {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.item-card p, .approved-item p, .claimed-item p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--gray-600);
+}
+
+.status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-pending {
+  background: rgba(245, 127, 23, 0.1);
+  color: #F57F17;
+}
+
+.status-approved {
+  background: rgba(46, 125, 50, 0.1);
+  color: #2E7D32;
+}
+
+.status-claimed {
+  background: rgba(21, 101, 192, 0.1);
+  color: #1565C0;
 }
 
 /* Tabs Navigation */

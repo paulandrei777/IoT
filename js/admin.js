@@ -412,47 +412,29 @@ function renderApprovedItemsTable(container, items) {
     });
 }
 
-// Render claimed items in table format
+// Render claimed items in card format
 function renderClaimedItemsTable(container, items) {
     container.innerHTML = '';
     if (!items.length) {
         container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--gray-600);">No claimed items available</p>';
         return;
     }
-
-    const table = document.createElement('table');
-    table.className = 'admin-table claimed-items-table';
-
-    const thead = document.createElement('thead');
-    thead.innerHTML = `
-        <tr>
-            <th>Image</th>
-            <th>Item Name</th>
-            <th>Claimed By</th>
-            <th>Date Claimed</th>
-            <th>Status</th>
-        </tr>
-    `;
-    table.appendChild(thead);
-
-    const tbody = document.createElement('tbody');
     items.forEach(item => {
-        const row = document.createElement('tr');
+        const div = document.createElement('div');
+        div.className = 'claimed-item';
         const claimedBy = item.claimed_by || 'Unknown';
         const dateClaimed = item.claimed_date ? new Date(item.claimed_date).toLocaleDateString() : new Date(item.created_at).toLocaleDateString();
-
-        row.innerHTML = `
-            <td><img src="${item.image_url}" alt="${item.name}" class="table-thumbnail" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'"></td>
-            <td>${item.name}</td>
-            <td>${claimedBy}</td>
-            <td>${dateClaimed}</td>
-            <td><span class="status-highlight claimed">Claimed</span></td>
+        div.innerHTML = `
+            <img src="${item.image_url}" alt="${item.name}" onclick="openLightbox('${item.image_url}', '${item.name}')" onerror="this.src='../uploads/default.png'">
+            <div>
+                <h4>${item.name}</h4>
+                <p>Claimed by: ${claimedBy}</p>
+                <p>Date: ${dateClaimed}</p>
+                <span class="status status-claimed">Claimed</span>
+            </div>
         `;
-        tbody.appendChild(row);
+        container.appendChild(div);
     });
-    table.appendChild(tbody);
-
-    container.appendChild(table);
 }
 
 // Action handlers

@@ -100,6 +100,11 @@ body {
 
 .field-group {
   margin-bottom: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  background: var(--white);
 }
 
 .field-group label {
