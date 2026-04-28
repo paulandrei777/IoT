@@ -3,7 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const itemRoutes = require('./routes/itemRoutes');
-const itemLogsRoutes = require('./routes/itemLogsRoutes'); // <-- add this
+const itemLogsRoutes = require('./routes/itemLogsRoutes');
 const { analyzeItem } = require('./controllers/itemController');
 
 const app = express();
@@ -23,7 +23,7 @@ app.use((req, res, next) => {
     fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) return next();
       const injected = data.replace(
-        '<!-- INJECT_CONFIG -->',
+        '',
         `<script>
           window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
           window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
@@ -38,26 +38,26 @@ app.use((req, res, next) => {
 
 // Routes
 app.use("/api/items", itemRoutes);
-app.use("/api/item-logs", itemLogsRoutes); // <-- register logs route
+app.use("/api/item-logs", itemLogsRoutes);
 app.post('/api/analyze-item', analyzeItem);
 
 // Root
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/home.html'));
-
+  const filePath = path.join(__dirname, '../client/home.html');
+  
   fs.readFile(filePath, 'utf8', (err, data) => {
     if (err) {
-      return res.status(500).send('Unable to load homepage');
+      console.error("Path error:", filePath, err);
+      return res.status(500).send('Unable to load home.html');
     }
 
     const injected = data.replace(
-      '<!-- INJECT_CONFIG -->',
+      '',
       `<script>
-          window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
-          window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
-        </script>`
+         window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
+         window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
+       </script>`
     );
-
     res.send(injected);
   });
 });
