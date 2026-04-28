@@ -30,7 +30,7 @@ function getHtmlFilePath(reqPath) {
 // Helper to inject config
 function injectSupabaseConfig(html) {
   return html.replace(
-    '',
+    '<!-- INJECT_CONFIG -->',
     `<script>
       window.SUPABASE_URL = '${process.env.SUPABASE_URL || ""}';
       window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY || ""}';

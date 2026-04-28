@@ -2,7 +2,10 @@
 let supabaseClient = null;
 let isInitialized = false;
 
-// Function to initialize Supabase client
+// Track if we've already warned about missing config to avoid spam
+let configWarningGiven = false;
+let gracePeriodStarted = false;
+
 function initializeSupabaseClient() {
   if (isInitialized && supabaseClient) {
     console.log('Supabase client already initialized');
@@ -13,15 +16,24 @@ function initializeSupabaseClient() {
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.warn('Supabase configuration not found yet. URL:', SUPABASE_URL, 'KEY exists:', !!SUPABASE_ANON_KEY);
+    if (!configWarningGiven) {
+      console.warn('⚠ Supabase configuration missing. URL:', SUPABASE_URL ? 'set' : 'missing', 'KEY:', SUPABASE_ANON_KEY ? 'set' : 'missing');
+      configWarningGiven = true;
+    }
     return null;
   }
 
-  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  isInitialized = true;
-  console.log('✓ Supabase client initialized successfully');
-  window.supabaseClient = supabaseClient;
-  return supabaseClient;
+  try {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    isInitialized = true;
+    configWarningGiven = false;
+    console.log('✓ Supabase client initialized successfully');
+    window.supabaseClient = supabaseClient;
+    return supabaseClient;
+  } catch (error) {
+    console.error('Failed to create Supabase client:', error);
+    return null;
+  }
 }
 
 async function getSupabaseClient() {
@@ -40,13 +52,13 @@ if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
     console.log('✓ Supabase initialized at script load time');
   }
 } else {
-  console.warn('⚠ Config not yet available - will initialize on demand');
+  console.log('⏳ Waiting for Supabase config from server injection...');
   const checkConfigInterval = setInterval(() => {
     if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY && !isInitialized) {
       clearInterval(checkConfigInterval);
       const client = initializeSupabaseClient();
       if (client) {
-        console.log('✓ Supabase initialized on demand');
+        console.log('✓ Supabase initialized after config injection');
       }
     }
   }, 100);
@@ -169,74 +181,100 @@ async function checkAuthAndRedirect() {
   const isAdminPage = currentPath.startsWith('/admin/');
   const isProtectedPage = isStudentPage || isAdminPage;
 
+  // Grace period: allow initial page render before checking session
+  if (!gracePeriodStarted && isProtectedPage) {
+    gracePeriodStarted = true;
+    console.log('⏳ Starting 2-second grace period before auth check...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+
   try {
+    // Wait for Supabase client to be ready
     const client = await getSupabaseClient();
     if (!client) {
-      console.warn('Supabase client unavailable during auth check.');
+      console.warn('⚠ Supabase client not available during auth check.');
       if (isProtectedPage) {
+        console.log('Redirecting to login due to no Supabase client');
         window.location.href = loginPagePath();
       }
       return;
     }
 
+    // Fetch session from Supabase
     const { data } = await client.auth.getSession();
     const session = data?.session;
+    
+    // DEBUG: Log the actual session state
+    console.log('📋 Session Check Result:', {
+      sessionExists: !!session,
+      userId: session?.user?.id || 'none',
+      userEmail: session?.user?.email || 'none',
+      sessionRaw: JSON.stringify(session, null, 2)
+    });
 
     // CASE 1: User is NOT logged in
     if (!session?.user?.id) {
-      console.log('No session found. Current page:', currentPath);
+      console.log('❌ No valid session. Current page:', currentPath);
       
       // Allow access to public auth pages (login, register)
       if (isPublicAuthPage) {
-        console.log('On public auth page - allowing access');
+        console.log('✓ On public auth page - access allowed');
         return;
       }
       
       // Redirect from protected pages to login
       if (isProtectedPage) {
-        console.log('On protected page without session - redirecting to login');
+        console.log('🔐 On protected page without session - redirecting to login');
         window.location.href = loginPagePath();
       }
       
-      // For any other page, allow access (future public pages)
+      // For any other page, allow access
       return;
     }
 
     // CASE 2: User IS logged in
-    console.log('Session found. User ID:', session.user.id);
+    console.log('✅ Session found. User ID:', session.user.id);
     
     // Get user profile and role
-    const profile = await getProfile(session.user.id);
-    const role = profile.role;
-    console.log('User role:', role);
+    try {
+      const profile = await getProfile(session.user.id);
+      const role = profile.role;
+      console.log('👤 User role:', role);
 
-    // If on public auth page and logged in, redirect to appropriate dashboard
-    if (isPublicAuthPage) {
-      console.log('Logged in user on public auth page - redirecting to dashboard');
-      await redirectBasedOnRole(session.user.id);
-      return;
+      // If on public auth page and logged in, redirect to appropriate dashboard
+      if (isPublicAuthPage) {
+        console.log('User logged in but on auth page - redirecting to dashboard');
+        await redirectBasedOnRole(session.user.id);
+        return;
+      }
+
+      // On protected pages - check role
+      if (isStudentPage && role !== 'student') {
+        console.log('On student page but user role is', role, '- redirecting');
+        await redirectBasedOnRole(session.user.id);
+        return;
+      }
+
+      if (isAdminPage && role !== 'admin') {
+        console.log('On admin page but user role is', role, '- redirecting');
+        await redirectBasedOnRole(session.user.id);
+        return;
+      }
+
+      // Logged in on correct page - do nothing
+      console.log('✓ User is on correct page with correct role');
+      
+    } catch (profileError) {
+      console.error('Error fetching profile:', profileError);
+      if (!isPublicAuthPage) {
+        window.location.href = loginPagePath();
+      }
     }
-
-    // On protected pages - check role
-    if (isStudentPage && role !== 'student') {
-      console.log('On student page but user is not student - redirecting to correct dashboard');
-      await redirectBasedOnRole(session.user.id);
-      return;
-    }
-
-    if (isAdminPage && role !== 'admin') {
-      console.log('On admin page but user is not admin - redirecting to correct dashboard');
-      await redirectBasedOnRole(session.user.id);
-      return;
-    }
-
-    // Logged in on correct page - do nothing
-    console.log('✓ User is on correct page with correct role');
 
   } catch (error) {
-    console.error('Auth check failed:', error);
-    // On error with critical functions, sign out and redirect to login
-    if (!isPublicAuthPage) {
+    console.error('❌ Auth check failed:', error);
+    // On error, redirect to login only if on protected page
+    if (isProtectedPage && !isPublicAuthPage) {
       try {
         if (supabaseClient) {
           await supabaseClient.auth.signOut();
@@ -277,23 +315,37 @@ async function logout() {
 // -------------------- INITIALIZATION HELPER --------------------
 
 // Function to wait for Supabase client to be ready
-async function waitForSupabaseClient(maxWait = 10000) {
+async function waitForSupabaseClient(maxWait = 15000) {
   const startTime = Date.now();
+  let warningLogged = false;
 
   while (!isInitialized) {
+    // Try to initialize if config just became available
     if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
       const client = initializeSupabaseClient();
       if (client) {
+        console.log('✓ Supabase client ready');
         return client;
       }
     }
 
+    // Check if critical config is missing
+    if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed > 5000 && !warningLogged) {
+        console.error('❌ CRITICAL: Supabase config not injected after 5 seconds. Check server logs.');
+        warningLogged = true;
+      }
+    }
+
+    // Soft timeout
     if (Date.now() - startTime > maxWait) {
-      console.warn('Supabase config still unavailable after wait.');
+      console.warn('⏱ Supabase initialization timeout after', maxWait, 'ms. Proceeding without client.');
       return null;
     }
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Small delay to avoid busy-waiting
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   return supabaseClient;
