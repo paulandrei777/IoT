@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Helper to map friendly root paths to actual HTML files
+// Helper to map paths to actual HTML files
 function getHtmlFilePath(reqPath) {
   const normalizedPath = reqPath === '/' ? '/client/home.html' : reqPath;
   const routeMap = {
@@ -27,40 +27,32 @@ function getHtmlFilePath(reqPath) {
   return path.join(__dirname, '..', mappedPath.replace(/^\//, ''));
 }
 
+// Helper to inject config
 function injectSupabaseConfig(html) {
   return html.replace(
-    '<!-- INJECT_CONFIG -->',
+    '',
     `<script>
-      window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
-      window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
+      window.SUPABASE_URL = '${process.env.SUPABASE_URL || ""}';
+      window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY || ""}';
     </script>`
   );
 }
 
-const staticMiddleware = express.static(path.join(__dirname, '..'));
+// 1. Serve static assets directly (CSS, JS, Images)
+app.use(express.static(path.join(__dirname, '..')));
 
-// Serve static assets first so JS/CSS/images are handled by Express without HTML injection.
-app.use((req, res, next) => {
-  if (req.path === '/' || req.path.endsWith('.html')) {
-    return next();
-  }
-  staticMiddleware(req, res, next);
-});
-
+// 2. Handle HTML file serving with config injection
 app.use((req, res, next) => {
   if (req.path === '/' || req.path.endsWith('.html')) {
     const filePath = getHtmlFilePath(req.path);
     fs.readFile(filePath, 'utf8', (err, data) => {
-      if (err) return next();
+      if (err) return next(); // Let express handle if file not found
       res.type('html').send(injectSupabaseConfig(data));
     });
   } else {
     next();
   }
 });
-
-// Serve static files for any assets not already handled above
-app.use(staticMiddleware);
 
 // Routes
 app.use("/api/items", itemRoutes);
