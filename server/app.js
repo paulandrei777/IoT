@@ -57,10 +57,8 @@ function injectSupabaseConfig(html, filePath) {
   return result;
 }
 
-// 1. Serve static assets directly (CSS, JS, Images)
-app.use(express.static(path.join(__dirname, '..')));
-
-// 2. Handle HTML file serving with config injection
+// 🔴 CRITICAL FIX: HTML injection MUST run BEFORE static middleware
+// 2. Handle HTML file serving with config injection (FIRST - before express.static)
 app.use((req, res, next) => {
   if (req.path === '/' || req.path.endsWith('.html')) {
     const filePath = getHtmlFilePath(req.path);
@@ -69,7 +67,7 @@ app.use((req, res, next) => {
     fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) {
         console.error(`❌ [FS] Failed to read ${filePath}:`, err.message);
-        return next(); // Let express handle 404
+        return next(); // Let express.static handle 404
       }
       
       console.log(`✓ [FS] Read ${Math.round(data.length / 1024)}KB from ${filePath}`);
@@ -80,6 +78,9 @@ app.use((req, res, next) => {
     next();
   }
 });
+
+// 1. Serve static assets directly (CSS, JS, Images) - AFTER HTML injection
+app.use(express.static(path.join(__dirname, '..')));
 
 // Routes
 app.use("/api/items", itemRoutes);
