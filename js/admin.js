@@ -1,5 +1,5 @@
-const API_ITEMS_URL = "http://localhost:5000/api/items";
-const API_LOGS_URL = "http://localhost:5000/api/item-logs";
+const API_ITEMS_URL = "https://iot-production-17b1.up.railway.app/api/items";
+const API_LOGS_URL = "https://iot-production-17b1.up.railway.app/api/item-logs";
 
 let allItems = [];
 let allLogs = [];

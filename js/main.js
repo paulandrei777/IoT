@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:5000/api/items";
+const API_URL = "https://iot-production-17b1.up.railway.app/api/items";
 
 let allItems = [];
 let activeItems = [];
