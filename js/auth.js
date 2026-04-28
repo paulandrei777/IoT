@@ -17,21 +17,26 @@ function initializeSupabaseClient() {
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     if (!configWarningGiven) {
-      console.warn('⚠ Supabase configuration missing. URL:', SUPABASE_URL ? 'set' : 'missing', 'KEY:', SUPABASE_ANON_KEY ? 'set' : 'missing');
+      console.error('❌ [INIT] Supabase configuration incomplete');
+      console.error(`  - SUPABASE_URL: ${typeof SUPABASE_URL} = "${SUPABASE_URL}" ${SUPABASE_URL ? '✓' : '❌'}`);
+      console.error(`  - SUPABASE_ANON_KEY: ${typeof SUPABASE_ANON_KEY} = "${SUPABASE_ANON_KEY}" ${SUPABASE_ANON_KEY ? '✓' : '❌'}`);
+      console.error('  👉 Verify server .env has SUPABASE_URL and SUPABASE_ANON_KEY set');
       configWarningGiven = true;
     }
     return null;
   }
 
   try {
+    console.log('🔄 [INIT] Creating Supabase client...');
     supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     isInitialized = true;
     configWarningGiven = false;
     console.log('✓ Supabase client initialized successfully');
+    console.log(`  - URL: ${SUPABASE_URL.substring(0, 50)}...`);
     window.supabaseClient = supabaseClient;
     return supabaseClient;
   } catch (error) {
-    console.error('Failed to create Supabase client:', error);
+    console.error('❌ [INIT] Failed to create Supabase client:', error);
     return null;
   }
 }
@@ -47,14 +52,24 @@ async function getSupabaseClient() {
 
 // Initialize immediately if config is available
 if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
+  console.log('🎯 [INIT] Config available immediately at script load time');
+  console.log(`  - URL type: ${typeof window.SUPABASE_URL}, length: ${window.SUPABASE_URL.length}`);
+  console.log(`  - Key type: ${typeof window.SUPABASE_ANON_KEY}, length: ${window.SUPABASE_ANON_KEY.length}`);
   const client = initializeSupabaseClient();
   if (client) {
     console.log('✓ Supabase initialized at script load time');
   }
 } else {
-  console.log('⏳ Waiting for Supabase config from server injection...');
+  console.log('⏳ [INIT] Config not found at script load. Checking window state...');
+  console.log(`  - window.SUPABASE_URL: ${typeof window.SUPABASE_URL} = ${window.SUPABASE_URL}`);
+  console.log(`  - window.SUPABASE_ANON_KEY: ${typeof window.SUPABASE_ANON_KEY} = ${window.SUPABASE_ANON_KEY}`);
+  console.log('  Waiting for server injection...');
+  
+  let pollCount = 0;
   const checkConfigInterval = setInterval(() => {
+    pollCount++;
     if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY && !isInitialized) {
+      console.log(`🔌 [INIT] Config detected after ${pollCount} polls (${pollCount * 100}ms)`);
       clearInterval(checkConfigInterval);
       const client = initializeSupabaseClient();
       if (client) {
@@ -318,8 +333,11 @@ async function logout() {
 async function waitForSupabaseClient(maxWait = 15000) {
   const startTime = Date.now();
   let warningLogged = false;
+  let pollCount = 0;
 
   while (!isInitialized) {
+    pollCount++;
+    
     // Try to initialize if config just became available
     if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
       const client = initializeSupabaseClient();
@@ -333,14 +351,21 @@ async function waitForSupabaseClient(maxWait = 15000) {
     if (!window.SUPABASE_URL || !window.SUPABASE_ANON_KEY) {
       const elapsed = Date.now() - startTime;
       if (elapsed > 5000 && !warningLogged) {
-        console.error('❌ CRITICAL: Supabase config not injected after 5 seconds. Check server logs.');
+        console.error('✗ CRITICAL: Supabase config not injected after 5 seconds');
+        console.error('  📋 Window state after 5s:');
+        console.error(`    - window.SUPABASE_URL: ${typeof window.SUPABASE_URL} = "${String(window.SUPABASE_URL).substring(0, 50)}${String(window.SUPABASE_URL).length > 50 ? '...' : ''}"`);
+        console.error(`    - window.SUPABASE_ANON_KEY: ${typeof window.SUPABASE_ANON_KEY} = "${String(window.SUPABASE_ANON_KEY).substring(0, 50)}${String(window.SUPABASE_ANON_KEY).length > 50 ? '...' : ''}"`);
+        console.error('  👉 Check server logs for injection details');
         warningLogged = true;
       }
     }
 
     // Soft timeout
     if (Date.now() - startTime > maxWait) {
-      console.warn('⏱ Supabase initialization timeout after', maxWait, 'ms. Proceeding without client.');
+      console.warn(`⏱ Supabase initialization timeout after ${maxWait}ms (${pollCount} polls)`);
+      console.warn('  📋 Final window state:');
+      console.warn(`    - window.SUPABASE_URL: ${typeof window.SUPABASE_URL} = "${String(window.SUPABASE_URL).substring(0, 50)}"`);
+      console.warn(`    - window.SUPABASE_ANON_KEY: ${typeof window.SUPABASE_ANON_KEY} = "${String(window.SUPABASE_ANON_KEY).substring(0, 50)}"`);
       return null;
     }
 
