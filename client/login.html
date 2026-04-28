@@ -50,6 +50,10 @@
   <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
+  <!-- Client config (fallback for development) -->
+  <script src="../js/config.js"></script>
+
+  <!-- INJECT_CONFIG -->
   <!-- Your auth file -->
   <script src="../js/auth.js"></script>
 
@@ -71,10 +75,13 @@
       e.preventDefault();
       hideError();
 
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-
       try {
+        // Wait for Supabase to be initialized
+        await window.waitForSupabaseClient();
+        
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+
         // 1. LOGIN
         await loginWithEmail(email, password);
 
@@ -88,13 +95,23 @@
         await redirectBasedOnRole(userId);
 
       } catch (err) {
-        showError(err.message);
+        showError(err.message || 'Login failed. Please try again.');
       }
     });
 
     document.addEventListener("DOMContentLoaded", async () => {
-      initPasswordToggle();
-      await checkSessionAndRedirect();
+      try {
+        initPasswordToggle();
+        
+        // Wait for Supabase to be initialized
+        await window.waitForSupabaseClient();
+        
+        // Then check auth and redirect if needed
+        await checkAuthAndRedirect();
+      } catch (error) {
+        console.error('Initialization error:', error);
+        // Don't block login page on initialization error
+      }
     });
   </script>
 </body>

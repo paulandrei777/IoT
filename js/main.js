@@ -44,39 +44,60 @@ async function fetchItems() {
 // Load user profile
 async function loadUserProfile() {
     try {
+        console.log('Loading user profile...');
         const { data } = await supabaseClient.auth.getSession();
+        console.log('Session data:', data);
         const session = data?.session;
         if (!session?.user?.id) {
-            window.location.href = loginPagePath();
+            console.log('No session or user ID found');
+            // Should not happen since checkAuthAndRedirect handles this
             return;
         }
+        console.log('User ID:', session.user.id);
 
         const profile = await getProfile(session.user.id);
+        console.log('Profile data:', profile);
 
-        // Role-based access control
-        if (profile.role !== 'student') {
-            window.location.href = adminDashboardPath();
-            return;
+        // Display user info if elements exist
+        const userNameEl = document.getElementById('userName');
+        if (userNameEl) {
+            userNameEl.textContent = profile.full_name || 'Unknown';
+            console.log('Updated userName:', profile.full_name);
         }
 
-        // Update dashboard welcome
-        document.getElementById('userName').textContent = profile.full_name || 'Unknown';
+        const userEmailEl = document.getElementById('userEmail');
+        if (userEmailEl) {
+            userEmailEl.textContent = profile.email || 'No email';
+            console.log('Updated userEmail:', profile.email);
+        }
 
         // Update settings profile info
-        document.getElementById('settingsFullName').textContent = profile.full_name || 'Unknown';
-        document.getElementById('settingsEmail').textContent = profile.email || 'No email';
-        document.getElementById('settingsRole').textContent = profile.role || 'No role';
+        const settingsFullNameEl = document.getElementById('settingsFullName');
+        if (settingsFullNameEl) {
+            settingsFullNameEl.textContent = profile.full_name || 'Unknown';
+            console.log('Updated settingsFullName:', profile.full_name);
+        }
 
-        // Attach logout handlers
-        const logoutBtns = document.querySelectorAll('#logoutBtn, #settingsLogoutBtn');
-        logoutBtns.forEach(btn => {
-            btn.addEventListener('click', async () => {
-                await logout();
-            });
-        });
+        const settingsEmailEl = document.getElementById('settingsEmail');
+        if (settingsEmailEl) {
+            settingsEmailEl.textContent = profile.email || 'No email';
+            console.log('Updated settingsEmail:', profile.email);
+        }
+
+        const settingsRoleEl = document.getElementById('settingsRole');
+        if (settingsRoleEl) {
+            settingsRoleEl.textContent = profile.role || 'No role';
+            console.log('Updated settingsRole:', profile.role);
+        }
+
+        // Attach logout handler
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', logout);
+        }
     } catch (error) {
-        console.error('Error loading user profile:', error);
-        window.location.href = loginPagePath();
+        console.error('Error loading profile:', error);
+        // Don't redirect on error, just log it
     }
 }
 
@@ -315,5 +336,6 @@ imageModalImg.addEventListener('click', toggleZoom);
 
 // Initialize app
 initNavigation();
+checkAuthAndRedirect();
 loadUserProfile();
 fetchItems();

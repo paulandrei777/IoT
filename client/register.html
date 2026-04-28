@@ -54,7 +54,15 @@
     </div>
   </div>
 
+  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  
+  <!-- Client config (fallback for development) -->
+  <script src="../js/config.js"></script>
+  
+  <!-- INJECT_CONFIG (server will inject here if running) -->
+  
+  <!-- Auth module (waits for config to be ready) -->
   <script src="../js/auth.js"></script>
 
   <script>
@@ -77,11 +85,14 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      const fullName = document.getElementById("fullName").value;
-      const email = document.getElementById("email").value;
-      const password = document.getElementById("password").value;
-
       try {
+        // Wait for Supabase to be initialized before attempting signup
+        await window.waitForSupabaseClient();
+        
+        const fullName = document.getElementById("fullName").value;
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+
         const result = await signUpWithEmail(fullName, email, password);
 
         showSuccess("Account created successfully!");
@@ -91,13 +102,23 @@
         }, 1500);
 
       } catch (err) {
-        showError(err.message);
+        showError(err.message || 'Registration failed. Please try again.');
       }
     });
 
     document.addEventListener("DOMContentLoaded", async () => {
-      initPasswordToggle();
-      await checkSessionAndRedirect();
+      try {
+        initPasswordToggle();
+        
+        // Wait for Supabase to be initialized
+        await window.waitForSupabaseClient();
+        
+        // Then check auth and redirect if needed
+        await checkAuthAndRedirect();
+      } catch (error) {
+        console.error('Initialization error:', error);
+        // Don't block registration page on initialization error
+      }
     });
   </script>
 

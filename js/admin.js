@@ -8,10 +8,11 @@ let activeModalItemId = null;
 let activeModalImageUrl = null;
 
 // Initialize based on page
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Initialize mobile menu on all admin pages
     setupMobileMenu();
-    loadUserProfile();
+    await checkAuthAndRedirect();
+    await loadUserProfile();
 
     if (document.getElementById('pendingContainer')) {
         // Dashboard page
@@ -120,17 +121,11 @@ async function loadUserProfile() {
         const { data } = await supabaseClient.auth.getSession();
         const session = data?.session;
         if (!session?.user?.id) {
-            window.location.href = loginPagePath();
+            // Should not happen since checkAuthAndRedirect handles this
             return;
         }
 
         const profile = await getProfile(session.user.id);
-
-        // Role-based access control
-        if (profile.role !== 'admin') {
-            window.location.href = studentDashboardPath();
-            return;
-        }
 
         document.getElementById('userName').textContent = profile.full_name || 'Unknown';
         document.getElementById('userEmail').textContent = profile.email || 'No email';
