@@ -10,12 +10,55 @@ if (!process.env.GEMINI_API_KEY) {
   throw new Error('GEMINI_API_KEY is missing in .env');
 }
 
-const aiClient = new GoogleGenerativeAI({
-  apiKey: process.env.GEMINI_API_KEY,
-});
+const aiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const configuredGeminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const geminiModelCandidates = Array.from(new Set([
+  configuredGeminiModel,
+  'gemini-2.5-flash',
+])).filter(Boolean);
+
+const isModelNotFoundError = (error) => {
+  const message = error?.message || '';
+  return /404|not found/i.test(message);
+};
+
+const generateWithModelFallback = async (requestPayload) => {
+  if (!aiClient || typeof aiClient.getGenerativeModel !== 'function') {
+    throw new Error('Gemini client is not initialized correctly.');
+  }
+
+  let lastError = null;
+
+  for (const modelName of geminiModelCandidates) {
+    try {
+      const model = aiClient.getGenerativeModel({ model: modelName });
+      if (!model || typeof model.generateContent !== 'function') {
+        continue;
+      }
+
+      const response = await model.generateContent(requestPayload);
+      return { response, modelName };
+    } catch (error) {
+      lastError = error;
+      if (!isModelNotFoundError(error)) {
+        throw error;
+      }
+
+      console.warn(`[analyzeItem] Gemini model unavailable: ${modelName}. Trying next candidate.`);
+    }
+  }
+
+  throw lastError || new Error('No compatible Gemini model was found for this API key.');
+};
 
 const extractAiText = (response) => {
   if (!response) return '';
+  if (response.response && typeof response.response.text === 'function') {
+    return response.response.text().trim();
+  }
+  if (typeof response.text === 'function') {
+    return response.text().trim();
+  }
   if (typeof response.output_text === 'string' && response.output_text.trim()) {
     return response.output_text.trim();
   }
@@ -85,7 +128,8 @@ const getItems = async (req, res) => {
 
 // Analyze a pending item image with Gemini AI and update metadata
 const analyzeItem = async (req, res) => {
-  const { id, image_url: inputImageUrl } = req.body;
+  const id = req.params.id || req.body?.id;
+  const inputImageUrl = req.body?.image_url;
   console.log('[analyzeItem] request received', { id, image_url: inputImageUrl });
 
   if (!id) {
@@ -118,25 +162,35 @@ const analyzeItem = async (req, res) => {
       throw new Error(`Unable to fetch image from storage: ${imageResponse.status} ${imageResponse.statusText}`);
     }
 
-    const prompt = 'Analyze this lost item image. Return a JSON object with two fields: "display_name" (concise item name) and "ai_description" (physical description). Do not add any conversational text.';
-    console.log('[analyzeItem] sending request to Gemini', { prompt, model: 'models/gemini-1.5-flash' });
+    const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+    const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
 
-    const aiResponse = await aiClient.responses.create({
-      model: 'models/gemini-1.5-flash',
-      input: [
+    const prompt = 'Analyze this lost item image. Return a JSON object with two fields: "display_name" (concise item name) and "ai_description" (physical description). Do not add any conversational text.';
+    console.log('[analyzeItem] sending request to Gemini', { prompt, modelCandidates: geminiModelCandidates });
+
+    const modelRequest = {
+      contents: [
         {
           role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image', image_uri: imageUrl },
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType,
+                data: imageBuffer.toString('base64'),
+              },
+            },
           ],
         },
       ],
-      temperature: 0.0,
       generationConfig: {
+        temperature: 0.0,
         responseMimeType: 'application/json',
       },
-    });
+    };
+
+    const { response: aiResponse, modelName: resolvedModel } = await generateWithModelFallback(modelRequest);
+    console.log('[analyzeItem] Gemini model used', { model: resolvedModel });
 
     console.log('[analyzeItem] raw Gemini response', JSON.stringify(aiResponse));
     const responseText = extractAiText(aiResponse);

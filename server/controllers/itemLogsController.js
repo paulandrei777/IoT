@@ -17,15 +17,29 @@ const getItemLogs = async (req, res) => {
 
 const createItemLog = async (req, res) => {
   try {
+    const { item_id, action, performed_by, timestamp } = req.body || {};
+
+    if (!item_id || !action || !performed_by) {
+      return res.status(400).json({
+        error: 'item_id, action, and performed_by are required'
+      });
+    }
+
+    const payload = {
+      item_id,
+      action,
+      performed_by,
+      timestamp: timestamp || new Date().toISOString()
+    };
 
     const { data, error } = await supabase
       .from('item_logs')
-      .insert([{ item_id, action, performed_by, timestamp }])
+      .insert([payload])
       .select();
 
     if (error) throw error;
 
-    res.status(201).json(data[0]);
+    res.status(201).json(data?.[0] || payload);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

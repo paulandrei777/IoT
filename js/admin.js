@@ -676,13 +676,12 @@ async function autoDescribeItem() {
     button.textContent = 'Loading...';
 
     try {
-        const res = await fetch('/api/analyze-item', {
+        const res = await fetch(`${API_ITEMS_URL}/${activeModalItemId}/analyze`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                id: activeModalItemId,
                 image_url: activeModalImageUrl
             })
         });
