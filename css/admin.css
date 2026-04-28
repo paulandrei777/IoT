@@ -799,6 +799,12 @@ body {
   margin-top: 8px;
 }
 
+.approved-item .actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
 /* Approved Controls */
 .approved-controls {
   margin-bottom: 16px;

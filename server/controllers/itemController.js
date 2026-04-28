@@ -396,7 +396,7 @@ const getClaimRequests = async (req, res) => {
     for (const req of pendingRequests) {
       const { data: item, error: itemError } = await supabase
         .from('items')
-        .select('name')
+        .select('display_name, name')
         .eq('id', req.item_id)
         .single();
 
@@ -404,7 +404,7 @@ const getClaimRequests = async (req, res) => {
         claimRequests.push({
           id: req.id,
           item_id: req.item_id,
-          item_name: item.name,
+          display_name: item.display_name || item.name,
           student_email: req.performed_by,
           pickup_notes: '', // TODO: Add details column to item_logs table
           timestamp: req.timestamp

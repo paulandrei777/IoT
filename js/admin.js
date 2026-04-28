@@ -334,13 +334,14 @@ function renderClaimRequests() {
     claimRequests.forEach(request => {
         const row = document.createElement('tr');
         const date = new Date(request.timestamp).toLocaleString();
+        const itemDisplayName = request.display_name || request.item_name || 'Unknown item';
 
         row.innerHTML = `
             <td>${request.id}</td>
             <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <img src="${getItemImage(request.item_id)}" alt="${request.item_name}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${request.item_name}')" onerror="this.src='../uploads/default.png'">
-                    ${request.item_name}
+                    <img src="${getItemImage(request.item_id)}" alt="${itemDisplayName}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${itemDisplayName}')" onerror="this.src='../uploads/default.png'">
+                    ${itemDisplayName}
                 </div>
             </td>
             <td>${request.student_email}</td>
@@ -418,6 +419,9 @@ function renderApprovedItemsTable(container, items) {
             ${description}
             <p>Approved: ${date}</p>
             <span class="status status-approved">Approved</span>
+            <div class="actions">
+                <button class="btn btn-danger" onclick="deleteItem('${item.id}')">Delete</button>
+            </div>
         `;
         container.appendChild(div);
     });
@@ -460,6 +464,30 @@ async function rejectItem(id) {
 
 async function claimItem(id) {
     await performAction(id, 'claim', 'claimed');
+}
+
+async function deleteItem(itemId) {
+    const shouldDelete = confirm('Are you sure you want to delete this approved item? This action cannot be undone.');
+    if (!shouldDelete) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('items')
+            .delete()
+            .eq('id', itemId);
+
+        if (error) throw error;
+
+        allItems = allItems.filter(item => item.id !== itemId);
+        claimRequests = claimRequests.filter(request => request.item_id !== itemId);
+
+        renderDashboard();
+        renderClaimRequests();
+        showSuccess('Item deleted successfully.');
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        showError('Failed to delete item. Please try again.');
+    }
 }
 
 async function performAction(id, action, newStatus) {
