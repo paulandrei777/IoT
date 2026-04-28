@@ -52,14 +52,16 @@ if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
 }
 
 function loginPagePath() {
-  const base = window.location.pathname;
-  if (base.includes('/admin/')) return '../client/login.html';
-  if (base.includes('/client/')) return 'login.html';
-  return '/client/login.html';
+  return '/login.html';
 }
 
-function studentDashboardPath() { return '../client/home.html'; }
-function adminDashboardPath() { return '../admin/dashboard.html'; }
+function studentDashboardPath() {
+  return '/';
+}
+
+function adminDashboardPath() {
+  return '/admin/dashboard.html';
+}
 
 // -------------------- PROFILE --------------------
 
@@ -169,11 +171,11 @@ async function checkAuthAndRedirect() {
     const currentPath = window.location.pathname;
 
     // Determine page type
-    const isLoginPage = currentPath.includes('/login.html');
-    const isRegisterPage = currentPath.includes('/register.html');
+    const isLoginPage = currentPath === '/login.html' || currentPath === '/client/login.html';
+    const isRegisterPage = currentPath === '/register.html' || currentPath === '/client/register.html';
     const isPublicAuthPage = isLoginPage || isRegisterPage; // Both are public pages
-    const isStudentPage = currentPath.includes('/client/home.html') || currentPath.includes('/client/');
-    const isAdminPage = currentPath.includes('/admin/');
+    const isStudentPage = currentPath === '/' || currentPath === '/client/home.html' || currentPath.startsWith('/client/') || currentPath === '/client/home.html';
+    const isAdminPage = currentPath.startsWith('/admin/');
     const isProtectedPage = isStudentPage || isAdminPage; // Both require authentication
 
     // CASE 1: User is NOT logged in
@@ -230,9 +232,7 @@ async function checkAuthAndRedirect() {
   } catch (error) {
     console.error('Auth check failed:', error);
     // On error with critical functions, sign out and redirect to login
-    // But don't do this for public pages or initialization errors
-    if (!window.location.pathname.includes('/login.html') && 
-        !window.location.pathname.includes('/register.html')) {
+    if (!isPublicAuthPage) {
       try {
         await supabaseClient.auth.signOut();
       } catch (e) {
@@ -251,12 +251,8 @@ async function checkSessionAndRedirect() {
 // -------------------- LOGOUT --------------------
 
 async function logout() {
-  // Ensure client is initialized
-  if (!isInitialized) {
-    initializeSupabaseClient();
-  }
-  
   try {
+    await waitForSupabaseClient();
     console.log('Logging out...');
     await supabaseClient.auth.signOut();
     console.log('Logout successful');
@@ -297,20 +293,19 @@ window.initPasswordToggle = initPasswordToggle;
 // -------------------- PASSWORD TOGGLE --------------------
 
 function initPasswordToggle() {
-document.querySelector('.password-toggle').addEventListener('click', function() {
-  const input = this.parentElement.querySelector('input');
-  const img = this.querySelector('.eye-icon');
-  
-  // Dito mo ilagay ang exact file path ng dalawang icons mo
-  const hideIcon = '../assets/icons/hide.png';
-  const showIcon = '../assets/icons/show.png';
-  
-  if (input.type === 'password') {
-    input.type = 'text';
-    img.src = showIcon; // Palit sa "Open Eye"
-  } else {
-    input.type = 'password';
-    img.src = hideIcon; // Balik sa "Closed Eye"
-  }
-});
+  document.querySelector('.password-toggle').addEventListener('click', function() {
+    const input = this.parentElement.querySelector('input');
+    const img = this.querySelector('.eye-icon');
+    
+    const hideIcon = '/assets/icons/hide.png';
+    const showIcon = '/assets/icons/show.png';
+    
+    if (input.type === 'password') {
+      input.type = 'text';
+      img.src = showIcon;
+    } else {
+      input.type = 'password';
+      img.src = hideIcon;
+    }
+  });
 }

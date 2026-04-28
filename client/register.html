@@ -5,13 +5,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Register - DominiFinds</title>
-  <link rel="stylesheet" href="../css/auth.css">
+  <link rel="stylesheet" href="/css/auth.css">
 </head>
 
 <body>
   <div class="auth-container">
     <div class="auth-brand">
-      <img src="../assets/images/domini.png" alt="" class="auth-logo">
+      <img src="/assets/images/domini.png" alt="" class="auth-logo">
       <p>Smart Lost & Found System</p>
     </div>
 
@@ -40,7 +40,7 @@
             <input type="password" id="password" name="password" placeholder="Create a password" required
               autocomplete="new-password" />
             <button type="button" class="password-toggle">
-              <img src="../assets/icons/show.png" class="eye-icon" alt="Toggle Password">
+              <img src="/assets/icons/show.png" class="eye-icon" alt="Toggle Password">
             </button>
           </div>
         </div>
@@ -49,7 +49,7 @@
       </form>
 
       <div class="auth-footer">
-        Already have an account? <a href="login.html">Sign in</a>
+        Already have an account? <a href="/login.html">Sign in</a>
       </div>
     </div>
   </div>
@@ -58,12 +58,12 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   
   <!-- Client config (fallback for development) -->
-  <script src="../js/config.js"></script>
+  <script src="/js/config.js"></script>
   
   <!-- INJECT_CONFIG (server will inject here if running) -->
   
   <!-- Auth module (waits for config to be ready) -->
-  <script src="../js/auth.js"></script>
+  <script src="/js/auth.js"></script>
 
   <script>
     const form = document.getElementById("registerForm");
@@ -98,7 +98,7 @@
         showSuccess("Account created successfully!");
 
         setTimeout(() => {
-          window.location.href = "login.html";
+          window.location.href = "/login.html";
         }, 1500);
 
       } catch (err) {

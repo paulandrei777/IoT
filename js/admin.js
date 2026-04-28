@@ -335,7 +335,7 @@ function renderClaimRequests() {
             <td>${request.id}</td>
             <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <img src="${getItemImage(request.item_id)}" alt="${itemDisplayName}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${itemDisplayName}')" onerror="this.src='../uploads/default.png'">
+                    <img src="${getItemImage(request.item_id)}" alt="${itemDisplayName}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${itemDisplayName}')" onerror="this.src='/uploads/default.png'">
                     ${itemDisplayName}
                 </div>
             </td>
@@ -359,7 +359,7 @@ function renderClaimRequests() {
 // Helper function to get item image
 function getItemImage(itemId) {
     const item = allItems.find(i => i.id === itemId);
-    return item ? item.image_url : '../uploads/default.png';
+    return item ? item.image_url : '/uploads/default.png';
 }
 
 // Generic render function for pending items
@@ -378,7 +378,7 @@ function renderItems(container, items, showButtons = false) {
         // Add ai_description display if available
         const description = item.ai_description ? `<p>${item.ai_description}</p>` : '';
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${displayName}" onerror="this.src='../uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onerror="this.src='/uploads/default.png'">
             <h3>${displayName}</h3>
             ${description}
             <p>Date Detected: ${date}</p>
@@ -409,7 +409,7 @@ function renderApprovedItemsTable(container, items) {
         const displayName = item.display_name || item.name;
         const description = item.ai_description ? `<p class="approved-description">${item.ai_description}</p>` : '<p class="approved-description muted">No description available</p>';
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='../uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='/uploads/default.png'">
             <h4>${displayName}</h4>
             ${description}
             <p>Approved: ${date}</p>
@@ -436,7 +436,7 @@ function renderClaimedItemsTable(container, items) {
         const dateClaimed = item.claimed_date ? new Date(item.claimed_date).toLocaleDateString() : new Date(item.created_at).toLocaleDateString();
         const displayName = item.display_name || item.name;
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='../uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='/uploads/default.png'">
             <div>
                 <h4>${displayName}</h4>
                 <p>Claimed by: ${claimedBy}</p>

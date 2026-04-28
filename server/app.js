@@ -13,53 +13,49 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files
-app.use(express.static(path.join(__dirname, '..')));
+// Helper to map friendly root paths to actual HTML files
+function getHtmlFilePath(reqPath) {
+  const normalizedPath = reqPath === '/' ? '/client/home.html' : reqPath;
+  const routeMap = {
+    '/login.html': '/client/login.html',
+    '/register.html': '/client/register.html',
+    '/admin/dashboard.html': '/admin/dashboard.html',
+    '/admin/auditLogs.html': '/admin/auditLogs.html'
+  };
 
-// Middleware to inject Supabase config into HTML files
+  const mappedPath = routeMap[normalizedPath] || normalizedPath;
+  return path.join(__dirname, '..', mappedPath.replace(/^\//, ''));
+}
+
+function injectSupabaseConfig(html) {
+  return html.replace(
+    '<!-- INJECT_CONFIG -->',
+    `<script>
+      window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
+      window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
+    </script>`
+  );
+}
+
+// Inject config into HTML pages before static assets are served
 app.use((req, res, next) => {
-  if (req.path.endsWith('.html')) {
-    const filePath = path.join(__dirname, '..', req.path);
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    const filePath = getHtmlFilePath(req.path);
     fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) return next();
-      const injected = data.replace(
-        '',
-        `<script>
-          window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
-          window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
-        </script>`
-      );
-      res.send(injected);
+      res.send(injectSupabaseConfig(data));
     });
   } else {
     next();
   }
 });
 
+// Serve static files after HTML injection middleware
+app.use(express.static(path.join(__dirname, '..')));
+
 // Routes
 app.use("/api/items", itemRoutes);
 app.use("/api/item-logs", itemLogsRoutes);
 app.post('/api/analyze-item', analyzeItem);
-
-// Root
-app.get('/', (req, res) => {
-  const filePath = path.join(__dirname, '../client/home.html');
-  
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) {
-      console.error("Path error:", filePath, err);
-      return res.status(500).send('Unable to load home.html');
-    }
-
-    const injected = data.replace(
-      '',
-      `<script>
-         window.SUPABASE_URL = '${process.env.SUPABASE_URL}';
-         window.SUPABASE_ANON_KEY = '${process.env.SUPABASE_ANON_KEY}';
-       </script>`
-    );
-    res.send(injected);
-  });
-});
 
 module.exports = app;
