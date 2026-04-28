@@ -13,39 +13,40 @@ function initializeSupabaseClient() {
   const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    console.error('Supabase configuration not found. URL:', SUPABASE_URL, 'KEY exists:', !!SUPABASE_ANON_KEY);
-    throw new Error('Supabase configuration not found. Please ensure the server is running or config is loaded.');
+    console.warn('Supabase configuration not found yet. URL:', SUPABASE_URL, 'KEY exists:', !!SUPABASE_ANON_KEY);
+    return null;
   }
 
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   isInitialized = true;
   console.log('✓ Supabase client initialized successfully');
-  
-  // Make supabaseClient globally available for other scripts
   window.supabaseClient = supabaseClient;
-  
   return supabaseClient;
+}
+
+async function getSupabaseClient() {
+  if (isInitialized && supabaseClient) {
+    return supabaseClient;
+  }
+
+  const client = await waitForSupabaseClient();
+  return client;
 }
 
 // Initialize immediately if config is available
 if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
-  try {
-    initializeSupabaseClient();
+  const client = initializeSupabaseClient();
+  if (client) {
     console.log('✓ Supabase initialized at script load time');
-  } catch (error) {
-    console.error('Failed to initialize Supabase at load time:', error);
   }
 } else {
   console.warn('⚠ Config not yet available - will initialize on demand');
-  // Setup a listener to initialize when config becomes available
   const checkConfigInterval = setInterval(() => {
     if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY && !isInitialized) {
       clearInterval(checkConfigInterval);
-      try {
-        initializeSupabaseClient();
+      const client = initializeSupabaseClient();
+      if (client) {
         console.log('✓ Supabase initialized on demand');
-      } catch (error) {
-        console.error('Failed to initialize Supabase on demand:', error);
       }
     }
   }, 100);
@@ -66,13 +67,13 @@ function adminDashboardPath() {
 // -------------------- PROFILE --------------------
 
 async function getProfile(userId) {
-  // Ensure client is initialized
-  if (!isInitialized) {
-    initializeSupabaseClient();
+  const client = await getSupabaseClient();
+  if (!client) {
+    throw new Error('Supabase client is not available.');
   }
-  
+
   console.log('Fetching profile for userId:', userId);
-  const { data, error } = await supabaseClient
+  const { data, error } = await client
     .from('profiles')
     .select('id, full_name, email, role')
     .eq('id', userId)
@@ -89,13 +90,13 @@ async function getProfile(userId) {
 // -------------------- LOGIN --------------------
 
 async function loginWithEmail(email, password) {
-  // Ensure client is initialized
-  if (!isInitialized) {
-    initializeSupabaseClient();
+  const client = await getSupabaseClient();
+  if (!client) {
+    throw new Error('Supabase client is not available.');
   }
-  
+
   console.log('Attempting login for:', email);
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
+  const { data, error } = await client.auth.signInWithPassword({
     email,
     password,
   });
@@ -110,14 +111,14 @@ async function loginWithEmail(email, password) {
 // -------------------- REGISTER --------------------
 
 async function signUpWithEmail(fullName, email, password) {
-  // Ensure client is initialized
-  if (!isInitialized) {
-    initializeSupabaseClient();
+  const client = await getSupabaseClient();
+  if (!client) {
+    throw new Error('Supabase client is not available.');
   }
-  
+
   console.log('Attempting signup for:', email);
   // Dito natin ipinapasa ang fullName sa metadata
-  const { data, error } = await supabaseClient.auth.signUp({
+  const { data, error } = await client.auth.signUp({
     email,
     password,
     options: {
@@ -160,23 +161,26 @@ async function redirectBasedOnRole(userId) {
 // -------------------- SESSION CHECK --------------------
 
 async function checkAuthAndRedirect() {
-  try {
-    // Ensure client is initialized
-    if (!isInitialized) {
-      initializeSupabaseClient();
-    }
-    
-    const { data } = await supabaseClient.auth.getSession();
-    const session = data?.session;
-    const currentPath = window.location.pathname;
+  const currentPath = window.location.pathname;
+  const isLoginPage = currentPath === '/login.html' || currentPath === '/client/login.html';
+  const isRegisterPage = currentPath === '/register.html' || currentPath === '/client/register.html';
+  const isPublicAuthPage = isLoginPage || isRegisterPage;
+  const isStudentPage = currentPath === '/' || currentPath === '/client/home.html' || currentPath.startsWith('/client/');
+  const isAdminPage = currentPath.startsWith('/admin/');
+  const isProtectedPage = isStudentPage || isAdminPage;
 
-    // Determine page type
-    const isLoginPage = currentPath === '/login.html' || currentPath === '/client/login.html';
-    const isRegisterPage = currentPath === '/register.html' || currentPath === '/client/register.html';
-    const isPublicAuthPage = isLoginPage || isRegisterPage; // Both are public pages
-    const isStudentPage = currentPath === '/' || currentPath === '/client/home.html' || currentPath.startsWith('/client/') || currentPath === '/client/home.html';
-    const isAdminPage = currentPath.startsWith('/admin/');
-    const isProtectedPage = isStudentPage || isAdminPage; // Both require authentication
+  try {
+    const client = await getSupabaseClient();
+    if (!client) {
+      console.warn('Supabase client unavailable during auth check.');
+      if (isProtectedPage) {
+        window.location.href = loginPagePath();
+      }
+      return;
+    }
+
+    const { data } = await client.auth.getSession();
+    const session = data?.session;
 
     // CASE 1: User is NOT logged in
     if (!session?.user?.id) {
@@ -234,7 +238,9 @@ async function checkAuthAndRedirect() {
     // On error with critical functions, sign out and redirect to login
     if (!isPublicAuthPage) {
       try {
-        await supabaseClient.auth.signOut();
+        if (supabaseClient) {
+          await supabaseClient.auth.signOut();
+        }
       } catch (e) {
         console.error('Signout error:', e);
       }
@@ -252,9 +258,15 @@ async function checkSessionAndRedirect() {
 
 async function logout() {
   try {
-    await waitForSupabaseClient();
+    const client = await getSupabaseClient();
+    if (!client) {
+      console.warn('Cannot log out because Supabase client is unavailable.');
+      window.location.href = loginPagePath();
+      return;
+    }
+
     console.log('Logging out...');
-    await supabaseClient.auth.signOut();
+    await client.auth.signOut();
     console.log('Logout successful');
   } catch (error) {
     console.error('Logout error:', error);
@@ -265,16 +277,25 @@ async function logout() {
 // -------------------- INITIALIZATION HELPER --------------------
 
 // Function to wait for Supabase client to be ready
-async function waitForSupabaseClient(maxWait = 5000) {
+async function waitForSupabaseClient(maxWait = 10000) {
   const startTime = Date.now();
-  
+
   while (!isInitialized) {
-    if (Date.now() - startTime > maxWait) {
-      throw new Error('Timeout waiting for Supabase client initialization');
+    if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
+      const client = initializeSupabaseClient();
+      if (client) {
+        return client;
+      }
     }
+
+    if (Date.now() - startTime > maxWait) {
+      console.warn('Supabase config still unavailable after wait.');
+      return null;
+    }
+
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  
+
   return supabaseClient;
 }
 

@@ -37,21 +37,30 @@ function injectSupabaseConfig(html) {
   );
 }
 
-// Inject config into HTML pages before static assets are served
+const staticMiddleware = express.static(path.join(__dirname, '..'));
+
+// Serve static assets first so JS/CSS/images are handled by Express without HTML injection.
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path.endsWith('.html')) {
+    return next();
+  }
+  staticMiddleware(req, res, next);
+});
+
 app.use((req, res, next) => {
   if (req.path === '/' || req.path.endsWith('.html')) {
     const filePath = getHtmlFilePath(req.path);
     fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) return next();
-      res.send(injectSupabaseConfig(data));
+      res.type('html').send(injectSupabaseConfig(data));
     });
   } else {
     next();
   }
 });
 
-// Serve static files after HTML injection middleware
-app.use(express.static(path.join(__dirname, '..')));
+// Serve static files for any assets not already handled above
+app.use(staticMiddleware);
 
 // Routes
 app.use("/api/items", itemRoutes);
