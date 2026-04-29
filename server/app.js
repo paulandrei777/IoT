@@ -5,6 +5,7 @@ const path = require('path');
 const itemRoutes = require('./routes/itemRoutes');
 const itemLogsRoutes = require('./routes/itemLogsRoutes');
 const { analyzeItem } = require('./controllers/itemController');
+const { getDefaultImageUrl } = require('./config/storageConfig');
 
 const app = express();
 
@@ -81,6 +82,14 @@ app.use((req, res, next) => {
 
 // 1. Serve static assets directly (CSS, JS, Images) - AFTER HTML injection
 app.use(express.static(path.join(__dirname, '..')));
+
+// API: Get storage configuration (including default image URL)
+app.get('/api/config/storage', (req, res) => {
+  res.json({
+    defaultImageUrl: getDefaultImageUrl(),
+    supabaseUrl: process.env.SUPABASE_URL,
+  });
+});
 
 // Routes
 app.use("/api/items", itemRoutes);

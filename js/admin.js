@@ -6,6 +6,21 @@ let allLogs = [];
 let claimRequests = [];
 let activeModalItemId = null;
 let activeModalImageUrl = null;
+let DEFAULT_IMAGE_URL = null; // Will be fetched from server
+
+// Fetch storage config from server
+async function loadStorageConfig() {
+  try {
+    const response = await fetch('/api/config/storage');
+    const data = await response.json();
+    DEFAULT_IMAGE_URL = data.defaultImageUrl;
+    console.log('✓ [ADMIN] Default image URL loaded:', DEFAULT_IMAGE_URL);
+  } catch (error) {
+    console.error('❌ [ADMIN] Failed to load storage config:', error);
+    // Fallback - this should not happen in production
+    DEFAULT_IMAGE_URL = `${window.SUPABASE_URL}/storage/v1/object/public/items/default.png`;
+  }
+}
 
 // Initialize based on page
 document.addEventListener('DOMContentLoaded', async function() {
@@ -13,6 +28,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     setupMobileMenu();
     await checkAuthAndRedirect();
     await loadUserProfile();
+    await loadStorageConfig(); // Load default image URL from server
 
     if (document.getElementById('pendingContainer')) {
         // Dashboard page
@@ -335,7 +351,7 @@ function renderClaimRequests() {
             <td>${request.id}</td>
             <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <img src="${getItemImage(request.item_id)}" alt="${itemDisplayName}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${itemDisplayName}')" onerror="this.src='/uploads/default.png'">
+                    <img src="${getItemImage(request.item_id)}" alt="${itemDisplayName}" class="table-thumbnail" onclick="openLightbox('${getItemImage(request.item_id)}', '${itemDisplayName}')" onerror="this.src='${DEFAULT_IMAGE_URL}'"
                     ${itemDisplayName}
                 </div>
             </td>
@@ -359,7 +375,7 @@ function renderClaimRequests() {
 // Helper function to get item image
 function getItemImage(itemId) {
     const item = allItems.find(i => i.id === itemId);
-    return item ? item.image_url : '/uploads/default.png';
+    return item ? item.image_url : DEFAULT_IMAGE_URL;
 }
 
 // Generic render function for pending items
@@ -378,7 +394,7 @@ function renderItems(container, items, showButtons = false) {
         // Add ai_description display if available
         const description = item.ai_description ? `<p>${item.ai_description}</p>` : '';
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${displayName}" onerror="this.src='/uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onerror="this.src='${DEFAULT_IMAGE_URL}'">
             <h3>${displayName}</h3>
             ${description}
             <p>Date Detected: ${date}</p>
@@ -409,7 +425,7 @@ function renderApprovedItemsTable(container, items) {
         const displayName = item.display_name || item.name;
         const description = item.ai_description ? `<p class="approved-description">${item.ai_description}</p>` : '<p class="approved-description muted">No description available</p>';
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='/uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='${DEFAULT_IMAGE_URL}'">
             <h4>${displayName}</h4>
             ${description}
             <p>Approved: ${date}</p>
@@ -436,7 +452,7 @@ function renderClaimedItemsTable(container, items) {
         const dateClaimed = item.claimed_date ? new Date(item.claimed_date).toLocaleDateString() : new Date(item.created_at).toLocaleDateString();
         const displayName = item.display_name || item.name;
         div.innerHTML = `
-            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='/uploads/default.png'">
+            <img src="${item.image_url}" alt="${displayName}" onclick="openLightbox('${item.image_url}', '${displayName}')" onerror="this.src='${DEFAULT_IMAGE_URL}'">
             <div>
                 <h4>${displayName}</h4>
                 <p>Claimed by: ${claimedBy}</p>

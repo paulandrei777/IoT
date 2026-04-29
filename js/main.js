@@ -3,6 +3,7 @@ const API_URL = "https://iot-production-17b1.up.railway.app/api/items";
 let allItems = [];
 let activeItems = [];
 let claimedItems = [];
+let DEFAULT_IMAGE_URL = null; // Will be fetched from server
 
 // Modal state
 const claimModal = document.getElementById('claimModal');
@@ -23,6 +24,20 @@ const sidebarBackdrop = document.getElementById('sidebarBackdrop');
 
 // Navigation state
 let currentSection = 'dashboard';
+
+// Fetch storage config from server
+async function loadStorageConfig() {
+  try {
+    const response = await fetch('/api/config/storage');
+    const data = await response.json();
+    DEFAULT_IMAGE_URL = data.defaultImageUrl;
+    console.log('✓ [CLIENT] Default image URL loaded:', DEFAULT_IMAGE_URL);
+  } catch (error) {
+    console.error('❌ [CLIENT] Failed to load storage config:', error);
+    // Fallback - this should not happen in production
+    DEFAULT_IMAGE_URL = `${window.SUPABASE_URL}/storage/v1/object/public/items/default.png`;
+  }
+}
 
 // Fetch all items and categorize them
 async function fetchItems() {
@@ -145,7 +160,7 @@ function renderItems(container, items, type = 'active') {
       <div class="item-card-head">
         <span class="item-status-badge ${item.status}">${statusText}</span>
       </div>
-      <img src="${item.image_url}" alt="${displayName}" onclick="openImageModal('${item.image_url}', '${displayName}')">
+      <img src="${item.image_url}" alt="${displayName}" onclick="openImageModal('${item.image_url}', '${displayName}')" onerror="this.src='${DEFAULT_IMAGE_URL}'">
       <h3>${displayName}</h3>
       ${description}
       <p>Date Detected: ${date}</p>
@@ -338,4 +353,5 @@ imageModalImg.addEventListener('click', toggleZoom);
 initNavigation();
 checkAuthAndRedirect();
 loadUserProfile();
+loadStorageConfig(); // Load default image URL from server
 fetchItems();
