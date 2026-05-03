@@ -241,6 +241,37 @@
     </div>
   </div>
 
+  <!-- Claim Verification Modal -->
+  <div id="claimVerificationModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeClaimVerificationModal()">&times;</button>
+      <div class="modal-header">
+        <h3 id="claimVerificationTitle">Verify Claim</h3>
+        <p class="modal-subtitle">Student Email: <span id="claimStudentEmail">N/A</span></p>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--gray-700); margin-bottom: 16px;">Please review the side-by-side images and decide whether to approve or reject this match.</p>
+        <div style="display: flex; gap: 16px; margin-bottom: 20px;">
+          <div style="flex: 1; text-align: center;">
+            <p style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px;">Item Photo</p>
+            <img id="claimItemImage" src="" alt="Item" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;">
+          </div>
+          <div style="flex: 1; text-align: center;">
+            <p style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px;">Student Photo</p>
+            <img id="claimStudentImage" src="" alt="Reference" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;">
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content: space-between;">
+        <button class="btn btn-danger" onclick="rejectClaim(document.getElementById('claimVerificationModal').dataset.reportId)">Reject Match</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" onclick="closeClaimVerificationModal()">Cancel</button>
+          <button class="btn btn-success" onclick="approveClaim(document.getElementById('claimVerificationModal').dataset.reportId, document.getElementById('claimVerificationModal').dataset.itemId)">Approve Claim</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <!-- INJECT_CONFIG -->
   <script src="/js/auth.js"></script>

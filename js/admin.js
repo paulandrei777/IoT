@@ -1,4 +1,4 @@
-﻿// ========== ADMIN DASHBOARD INITIALIZATION ==========
+// ========== ADMIN DASHBOARD INITIALIZATION ==========
 // DOM Elements
 let logoutBtn;
 let hamburgerBtn;
@@ -203,6 +203,12 @@ async function loadLostItemsTable() {
 
     let html = '';
     for (const report of reports) {
+      const reportDate = new Date(report.created_at).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+
       html += `
         <tr>
           <td>${report.student_name || 'N/A'}</td>
@@ -210,7 +216,7 @@ async function loadLostItemsTable() {
           <td>${report.last_location || 'Not specified'}</td>
           <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
           <td>
-            <button class="btn btn-small" onclick="alert('Report ID: ${report.id}')">View</button>
+            <button class="btn btn-small" data-report-id="${report.id}" onclick="handleViewLostItem(this)">View</button>
           </td>
         </tr>
       `;
@@ -292,7 +298,7 @@ async function loadClaimRequestsTable() {
 
       html += `
         <tr>
-          <td>${matchedItem?.name || 'N/A'}</td>
+          <td>${matchedItem?.display_name || 'N/A'}</td>
           <td>${report.student_email || 'N/A'}</td>
           <td>${requestDate}</td>
           <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
@@ -301,6 +307,7 @@ async function loadClaimRequestsTable() {
               ${itemPhotoHtml}
               ${studentPhotoHtml}
               <span class="match-score" title="AI Match Score" style="font-weight: bold; color: #D32F2F;">${report.match_score || 0}%</span>
+              <button class="btn btn-small" data-report-id="${report.id}" data-item-id="${matchedItem?.id}" data-match-score="${report.match_score}" data-student-email="${report.student_email}" onclick="handleVerifyClaim(this)">Verify</button>
             </div>
           </td>
         </tr>
@@ -309,11 +316,12 @@ async function loadClaimRequestsTable() {
 
     claimRequestsTableBody.innerHTML = html;
     console.log('Claim requests table loaded with', reports.length, 'requests');
+    console.log('Claim data:', reports);
   } catch (error) {
     console.error('Error loading claim requests table:', error);
     const claimRequestsTableBody = document.getElementById('claimRequestsTableBody');
     if (claimRequestsTableBody) {
-      claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading requests. Please refresh.</td></tr>';
+      claimRequestsTableBody.innerHTML = '<tr><td colspan="6" class="error">Error loading requests. Please refresh.</td></tr>';
     }
   }
 }
@@ -830,3 +838,114 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.error('Fatal error during DOMContentLoaded:', error);
   }
 });
+
+// ========== HANDLE LOST ITEM VIEW ==========
+function handleViewLostItem(button) {
+  const reportId = button.dataset.reportId;
+  console.log('Viewing lost item report:', reportId);
+  alert("Report ID: " + reportId + ". Full report details coming soon.");
+}
+
+// ========== HANDLE CLAIM VERIFICATION ==========
+function handleVerifyClaim(button) {
+  const reportId = button.dataset.reportId;
+  const itemId = button.dataset.itemId;
+  const matchScore = button.dataset.matchScore;
+  const studentEmail = button.dataset.studentEmail;
+  
+  console.log('Verifying claim:', { reportId, itemId, matchScore, studentEmail });
+  
+  // Open claim verification modal
+  openClaimVerificationModal(reportId, itemId, matchScore, studentEmail);
+}
+
+// ========== APPROVE CLAIM ==========
+async function approveClaim(reportId, itemId) {
+  try {
+    if (!window.supabaseClient) throw new Error('Supabase client not available');
+    
+    // Update lost_reports status to 'matched'
+    const { error: reportError } = await window.supabaseClient
+      .from('lost_reports')
+      .update({ status: 'matched' })
+      .eq('id', reportId);
+    
+    if (reportError) throw reportError;
+    
+    // Update items status to 'claimed'
+    const { error: itemError } = await window.supabaseClient
+      .from('items')
+      .update({ status: 'claimed' })
+      .eq('id', itemId);
+    
+    if (itemError) throw itemError;
+    
+    console.log('Claim approved successfully');
+    alert('? Claim approved! Item marked as CLAIMED.');
+    closeClaimVerificationModal();
+    loadClaimRequestsTable();
+  } catch (error) {
+    console.error('Error approving claim:', error);
+    alert('Failed to approve claim: ' + error.message);
+  }
+}
+
+// ========== REJECT CLAIM ==========
+async function rejectClaim(reportId) {
+  try {
+    if (!window.supabaseClient) throw new Error('Supabase client not available');
+    
+    // Clear matched_item_id and set status to 'pending'
+    const { error } = await window.supabaseClient
+      .from('lost_reports')
+      .update({ matched_item_id: null, status: 'pending' })
+      .eq('id', reportId);
+    
+    if (error) throw error;
+    
+    console.log('Claim rejected successfully');
+    alert('? Claim rejected! Report moved back to Lost Items.');
+    closeClaimVerificationModal();
+    loadClaimRequestsTable();
+    loadLostItemsTable();
+  } catch (error) {
+    console.error('Error rejecting claim:', error);
+    alert('Failed to reject claim: ' + error.message);
+  }
+}
+
+// ========== CLAIM VERIFICATION MODAL ==========
+function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail) {
+  const modal = document.getElementById('claimVerificationModal');
+  if (!modal) {
+    console.warn('claimVerificationModal element not found');
+    return;
+  }
+  
+  // Store data for approval/rejection
+  modal.dataset.reportId = reportId;
+  modal.dataset.itemId = itemId;
+  
+  // Update modal title
+  const title = document.getElementById('claimVerificationTitle');
+  if (title) {
+    title.textContent = "Verify Claim - Match Score: " + matchScore + "%";
+  }
+  
+  // Update student email
+  const emailDisplay = document.getElementById('claimStudentEmail');
+  if (emailDisplay) {
+    emailDisplay.textContent = studentEmail || 'N/A';
+  }
+  
+  // Show modal
+  modal.style.display = 'flex';
+}
+
+function closeClaimVerificationModal() {
+  const modal = document.getElementById('claimVerificationModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+

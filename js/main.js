@@ -90,6 +90,22 @@ async function loadUserProfile() {
   }
 }
 
+// ========== TOAST NOTIFICATION ==========
+
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  
+  // Auto-remove after animation completes
+  setTimeout(() => {
+    if (toast && toast.parentNode) {
+      toast.parentNode.removeChild(toast);
+    }
+  }, 3500);
+}
+
 // ========== STATUS MESSAGES ==========
 
 function setStatusMessage(element, message, type = 'info') {
@@ -390,11 +406,23 @@ async function submitLostReport(event) {
     matchState.matched_item_id = null;
     matchState.match_score = 0;
     
+    // Show toast notification
+    showToast('Success! Your report has been submitted. Please wait for Admin verification.', 'success');
+    
     setStatusMessage(
       reportFormMessage,
       'Your report has been filed. Our Admin will verify the match and contact you.',
       'success'
     );
+    
+    // Redirect back to search after 3 seconds
+    setTimeout(() => {
+      if (reportSection) reportSection.hidden = true;
+      if (reportSuccessPanel) reportSuccessPanel.hidden = true;
+      if (searchBtn) searchBtn.disabled = false;
+      setStatusMessage(searchStatus, '', 'info');
+      if (itemDescriptionTextarea) itemDescriptionTextarea.focus();
+    }, 3000);
 
   } catch (error) {
     console.error('Report submission error:', error);
