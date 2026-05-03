@@ -1,11 +1,13 @@
-﻿const API_ITEMS_URL = "https://iot-production-17b1.up.railway.app/api/items";
-const API_LOST_REPORTS_URL = "https://iot-production-17b1.up.railway.app/api/items/lost-reports";
-const API_LOGS_URL = "https://iot-production-17b1.up.railway.app/api/item-logs";
+﻿const API_BASE_URL = 'https://iot-production-17b1.up.railway.app/api';
+const API_ITEMS_URL = `${API_BASE_URL}/items`;
+const API_LOST_REPORTS_URL = `${API_BASE_URL}/items/lost-reports`;
+const API_LOGS_URL = `${API_BASE_URL}/item-logs`;
 
 let allItems = [];
 let lostReports = [];
 let DEFAULT_IMAGE_URL = null;
 
+// ==================== STORAGE CONFIG ====================
 async function loadStorageConfig() {
     try {
         const response = await fetch('/api/config/storage');
@@ -18,12 +20,15 @@ async function loadStorageConfig() {
     }
 }
 
+// ==================== FETCH DATA ====================
 async function fetchItems() {
     try {
         const res = await fetch(API_ITEMS_URL);
         if (!res.ok) throw new Error('Failed to fetch items');
         allItems = await res.json();
-        renderAdminDashboard();
+        console.log('✓ Items fetched:', allItems.length);
+        updateStatistics();
+        renderVerificationHub();
     } catch (error) {
         console.error('Error fetching items:', error);
         showError('Failed to load items. Please try again.');
@@ -35,42 +40,32 @@ async function fetchLostReports() {
         const res = await fetch(API_LOST_REPORTS_URL);
         if (!res.ok) throw new Error('Failed to fetch lost reports');
         lostReports = await res.json();
-        renderAdminDashboard();
+        console.log('✓ Lost reports fetched:', lostReports.length);
+        updateStatistics();
+        renderVerificationHub();
     } catch (error) {
         console.error('Error fetching lost reports:', error);
         showError('Failed to load reports. Please try again.');
     }
 }
 
-async function fetchLogs() {
-    try {
-        const response = await fetch(API_LOGS_URL);
-        if (!response.ok) throw new Error('Failed to fetch logs');
-        const logs = await response.json();
-        logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        displayLogs(logs);
-    } catch (error) {
-        console.error('Error fetching logs:', error);
-        const tbody = document.getElementById('logs-tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="5">Error loading logs. Please refresh the page.</td></tr>';
-    }
-}
-
-function renderAdminDashboard() {
-    updateStatistics();
-    renderVerificationHub();
-}
-
+// ==================== STATISTICS ====================
 function updateStatistics() {
     const totalItems = allItems.length;
+    const pendingItems = allItems.filter(item => item.status === 'pending').length;
+    const approvedItems = allItems.filter(item => item.status === 'approved').length;
+    const claimedItems = allItems.filter(item => item.status === 'claimed').length;
     const pendingReports = lostReports.filter(report => report.status === 'pending').length;
     const matchedReports = lostReports.filter(report => report.status === 'matched').length;
 
     document.getElementById('totalItems').textContent = totalItems;
     document.getElementById('pendingReports').textContent = pendingReports;
     document.getElementById('matchedReports').textContent = matchedReports;
+
+    console.log('📊 Dashboard Stats Updated:', { totalItems, pendingItems, approvedItems, claimedItems, pendingReports, matchedReports });
 }
 
+// ==================== VERIFICATION HUB ====================
 function renderVerificationHub() {
     const container = document.getElementById('verificationContainer');
     if (!container) return;
@@ -137,9 +132,8 @@ async function approveMatch(reportId) {
         const response = await fetch(`${API_LOST_REPORTS_URL}/${reportId}/approve-match`, { method: 'PATCH' });
         if (!response.ok) throw new Error('Failed to approve match');
 
-        await fetchItems();
+        showSuccess('Match approved successfully!');
         await fetchLostReports();
-        showSuccess('Match approved and item claimed successfully.');
     } catch (error) {
         console.error('Error approving match:', error);
         showError(error.message || 'Failed to approve match.');
@@ -151,33 +145,69 @@ async function rejectMatch(reportId) {
         const response = await fetch(`${API_LOST_REPORTS_URL}/${reportId}/reject-match`, { method: 'PATCH' });
         if (!response.ok) throw new Error('Failed to reject match');
 
+        showSuccess('Match rejected. Report reset to searching.');
         await fetchLostReports();
-        showSuccess('Match rejected and report reset to searching.');
     } catch (error) {
         console.error('Error rejecting match:', error);
         showError(error.message || 'Failed to reject match.');
     }
 }
 
-function escapeHtml(value) {
-    return String(value || '').replace(/[&<>"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[tag]));
+// ==================== AUTHENTICATION ====================
+async function loadUserProfile() {
+    try {
+        const client = await getSupabaseClient();
+        if (!client) {
+            console.error('Supabase client not available');
+            return;
+        }
+
+        const { data } = await client.auth.getSession();
+        const session = data?.session;
+        
+        if (!session?.user?.id) {
+            console.log('No session found, user not logged in');
+            return;
+        }
+
+        const profile = await getProfile(session.user.id);
+        document.getElementById('userName').textContent = profile.full_name || 'Unknown';
+        document.getElementById('userEmail').textContent = profile.email || 'No email';
+        document.getElementById('userRole').textContent = profile.role || 'No role';
+        
+        console.log('✓ User profile loaded:', profile);
+    } catch (error) {
+        console.error('❌ Error loading user profile:', error);
+        document.getElementById('userName').textContent = 'Error';
+        document.getElementById('userEmail').textContent = 'Error';
+    }
 }
 
-function showError(message) {
-    alert(message);
-}
-
-function showSuccess(message) {
-    alert(message);
-}
-
+// ==================== EVENT LISTENERS ====================
 function setupDashboardEventListeners() {
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', () => {
-            fetchItems();
-            fetchLostReports();
+        refreshBtn.addEventListener('click', async () => {
+            console.log('Refreshing dashboard...');
+            await fetchItems();
+            await fetchLostReports();
         });
+    }
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+}
+
+async function handleLogout() {
+    try {
+        console.log('Logging out...');
+        await logout();
+        window.location.href = '/login.html';
+    } catch (error) {
+        console.error('Logout error:', error);
+        window.location.href = '/login.html';
     }
 }
 
@@ -213,78 +243,19 @@ function closeMobileMenu() {
     if (sidebarOverlay) sidebarOverlay.classList.remove('active');
 }
 
-async function loadUserProfile() {
-    try {
-        const { data } = await supabaseClient.auth.getSession();
-        const session = data?.session;
-        if (!session?.user?.id) return;
-
-        const profile = await getProfile(session.user.id);
-        document.getElementById('userName').textContent = profile.full_name || 'Unknown';
-        document.getElementById('userEmail').textContent = profile.email || 'No email';
-        document.getElementById('userRole').textContent = profile.role || 'No role';
-
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', async () => await logout());
-        }
-    } catch (error) {
-        console.error('Error loading user profile:', error);
-        window.location.href = loginPagePath();
-    }
+// ==================== UTILITIES ====================
+function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[tag]));
 }
 
-function displayLogs(logs) {
-    const tbody = document.getElementById('logs-tbody');
-    const noLogs = document.getElementById('no-logs');
-
-    if (!tbody) return;
-    if (!logs || !logs.length) {
-        tbody.innerHTML = '';
-        if (noLogs) noLogs.style.display = 'block';
-        return;
-    }
-
-    if (noLogs) noLogs.style.display = 'none';
-    tbody.innerHTML = logs.map(log => {
-        const date = new Date(log.timestamp);
-        const formattedDate = date.toLocaleString();
-        const badgeClass = getBadgeClass(log.action);
-
-        return `
-            <tr>
-                <td>${escapeHtml(log.id)}</td>
-                <td>${escapeHtml(log.item_id)}</td>
-                <td><span class="badge ${badgeClass}">${escapeHtml(capitalize(log.action))}</span></td>
-                <td>${escapeHtml(log.performed_by)}</td>
-                <td class="timestamp">${formattedDate}</td>
-            </tr>
-        `;
-    }).join('');
+function showError(message) {
+    console.error('❌ Error:', message);
+    alert(message);
 }
 
-function getBadgeClass(action) {
-    switch ((action || '').toLowerCase()) {
-        case 'approve':
-        case 'approved':
-        case 'claim_approved':
-            return 'badge-approved';
-        case 'reject':
-        case 'rejected':
-        case 'claim_rejected':
-            return 'badge-rejected';
-        case 'claim':
-        case 'claimed':
-        case 'claim_requested':
-            return 'badge-claimed';
-        default:
-            return '';
-    }
-}
-
-function capitalize(str) {
-    if (!str) return '';
-    return str.charAt(0).toUpperCase() + str.slice(1);
+function showSuccess(message) {
+    console.log('✓ Success:', message);
+    alert(message);
 }
 
 function openLightbox(src, alt) {
@@ -301,19 +272,19 @@ function closeLightbox() {
     if (lightbox) lightbox.classList.remove('active');
 }
 
+// ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🔄 Admin Dashboard initializing...');
+    
     setupMobileMenu();
     await checkAuthAndRedirect();
-    await loadUserProfile();
     await loadStorageConfig();
-
-    if (document.getElementById('verificationContainer')) {
-        setupDashboardEventListeners();
-        await fetchItems();
-        await fetchLostReports();
-    }
-
-    if (document.getElementById('logs-tbody')) {
-        await fetchLogs();
-    }
+    await loadUserProfile();
+    setupDashboardEventListeners();
+    
+    console.log('📂 Loading dashboard data...');
+    await fetchItems();
+    await fetchLostReports();
+    
+    console.log('✅ Admin Dashboard ready');
 });
