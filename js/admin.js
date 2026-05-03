@@ -35,6 +35,15 @@ function showSection(sectionId) {
     
     currentSection = sectionId;
     
+    // Load data for the selected section
+    if (sectionId === 'itemManagement') {
+      loadItemsTable();
+    } else if (sectionId === 'lostItems') {
+      loadLostItemsTable();
+    } else if (sectionId === 'claimRequests') {
+      loadClaimRequestsTable();
+    }
+    
     // Close sidebar on mobile
     if (sidebar) {
       sidebar.classList.remove('active');
@@ -44,6 +53,211 @@ function showSection(sectionId) {
     }
   } catch (error) {
     console.error('Error switching section:', error);
+  }
+}
+
+// ========== ITEMS TABLE LOADING ==========
+async function loadItemsTable() {
+  try {
+    if (!window.supabaseClient) {
+      console.warn('Supabase client not available');
+      return;
+    }
+
+    const itemsTableBody = document.getElementById('itemsTableBody');
+    if (!itemsTableBody) {
+      console.warn('itemsTableBody element not found');
+      return;
+    }
+
+    console.log('Loading items table...');
+    itemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading items...</td></tr>';
+
+    // Fetch all items
+    const { data: items, error } = await window.supabaseClient
+      .from('items')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!items || items.length === 0) {
+      itemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No items found.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    for (const item of items) {
+      // Build public URL if image_url exists
+      const imageHtml = item.image_url
+        ? `<img src="${item.image_url}" alt="${item.name}" class="table-thumbnail" onclick="openLightbox('${item.image_url}')" style="cursor: pointer; max-height: 60px; max-width: 60px; border-radius: 4px;">`
+        : '<span class="no-image">No image</span>';
+
+      html += `
+        <tr>
+          <td>${imageHtml}</td>
+          <td>${item.name || 'N/A'}</td>
+          <td>${item.description ? item.description.substring(0, 50) + (item.description.length > 50 ? '...' : '') : 'N/A'}</td>
+          <td><span class="status-badge status-${item.status || 'pending'}">${(item.status || 'pending').toUpperCase()}</span></td>
+          <td>
+            <button class="btn btn-small" onclick="alert('Item ID: ${item.id}')">View</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    itemsTableBody.innerHTML = html;
+    console.log('Items table loaded with', items.length, 'items');
+  } catch (error) {
+    console.error('Error loading items table:', error);
+    const itemsTableBody = document.getElementById('itemsTableBody');
+    if (itemsTableBody) {
+      itemsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading items. Please refresh.</td></tr>';
+    }
+  }
+}
+
+// ========== LOST ITEMS TABLE LOADING ==========
+async function loadLostItemsTable() {
+  try {
+    if (!window.supabaseClient) {
+      console.warn('Supabase client not available');
+      return;
+    }
+
+    const lostItemsTableBody = document.getElementById('lostItemsTableBody');
+    if (!lostItemsTableBody) {
+      console.warn('lostItemsTableBody element not found');
+      return;
+    }
+
+    console.log('Loading lost items table...');
+    lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
+
+    // Fetch lost reports that have no matched_item_id
+    const { data: reports, error } = await window.supabaseClient
+      .from('lost_reports')
+      .select('*')
+      .is('matched_item_id', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!reports || reports.length === 0) {
+      lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No unmatched lost items.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    for (const report of reports) {
+      html += `
+        <tr>
+          <td>${report.student_name || 'N/A'}</td>
+          <td>${report.item_description ? report.item_description.substring(0, 50) + (report.item_description.length > 50 ? '...' : '') : 'N/A'}</td>
+          <td>${report.last_location || 'Not specified'}</td>
+          <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
+          <td>
+            <button class="btn btn-small" onclick="alert('Report ID: ${report.id}')">View</button>
+          </td>
+        </tr>
+      `;
+    }
+
+    lostItemsTableBody.innerHTML = html;
+    console.log('Lost items table loaded with', reports.length, 'reports');
+  } catch (error) {
+    console.error('Error loading lost items table:', error);
+    const lostItemsTableBody = document.getElementById('lostItemsTableBody');
+    if (lostItemsTableBody) {
+      lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
+    }
+  }
+}
+
+// ========== CLAIM REQUESTS TABLE LOADING ==========
+async function loadClaimRequestsTable() {
+  try {
+    if (!window.supabaseClient) {
+      console.warn('Supabase client not available');
+      return;
+    }
+
+    const claimRequestsTableBody = document.getElementById('claimRequestsTableBody');
+    if (!claimRequestsTableBody) {
+      console.warn('claimRequestsTableBody element not found');
+      return;
+    }
+
+    console.log('Loading claim requests table...');
+    claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
+
+    // Fetch lost reports with matched items (left join with items)
+    const { data: reports, error } = await window.supabaseClient
+      .from('lost_reports')
+      .select(`
+        id,
+        student_name,
+        student_email,
+        match_score,
+        status,
+        created_at,
+        ref_photo_url_1,
+        matched_item_id,
+        items(id, name, image_url)
+      `)
+      .not('matched_item_id', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    if (!reports || reports.length === 0) {
+      claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No claim requests.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    for (const report of reports) {
+      const matchedItem = Array.isArray(report.items) && report.items.length > 0 ? report.items[0] : report.items;
+
+      const itemPhotoHtml = matchedItem?.image_url
+        ? `<img src="${matchedItem.image_url}" alt="Item" class="table-thumbnail" onclick="openLightbox('${matchedItem.image_url}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
+        : '<span class="no-image">-</span>';
+
+      const studentPhotoHtml = report.ref_photo_url_1
+        ? `<img src="${report.ref_photo_url_1}" alt="Reference" class="table-thumbnail" onclick="openLightbox('${report.ref_photo_url_1}')" title="Student Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
+        : '<span class="no-image">-</span>';
+
+      const requestDate = new Date(report.created_at).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+
+      html += `
+        <tr>
+          <td>${matchedItem?.name || 'N/A'}</td>
+          <td>${report.student_email || 'N/A'}</td>
+          <td>${requestDate}</td>
+          <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${itemPhotoHtml}
+              ${studentPhotoHtml}
+              <span class="match-score" title="AI Match Score" style="font-weight: bold; color: #D32F2F;">${report.match_score || 0}%</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    claimRequestsTableBody.innerHTML = html;
+    console.log('Claim requests table loaded with', reports.length, 'requests');
+  } catch (error) {
+    console.error('Error loading claim requests table:', error);
+    const claimRequestsTableBody = document.getElementById('claimRequestsTableBody');
+    if (claimRequestsTableBody) {
+      claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading requests. Please refresh.</td></tr>';
+    }
   }
 }
 
@@ -460,6 +674,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Load verification hub
     await loadVerificationHub();
+
+    // Load Item Management table by default
+    await loadItemsTable();
 
     console.log('=== Admin Dashboard Initialization complete ===');
 
