@@ -89,18 +89,24 @@ async function loadItemsTable() {
     let html = '';
     for (const item of items) {
       // Build public URL if image_url exists
-      const imageHtml = item.image_url
-        ? `<img src="${item.image_url}" alt="${item.name}" class="table-thumbnail" onclick="openLightbox('${item.image_url}')" style="cursor: pointer; max-height: 60px; max-width: 60px; border-radius: 4px;">`
+      const publicImageUrl = item.image_url ? getSupabasePublicUrl(item.image_url) : '';
+      const imageHtml = publicImageUrl
+        ? `<img src="${publicImageUrl}" alt="${item.display_name}" class="table-thumbnail" onclick="openLightbox('${publicImageUrl}')" style="cursor: pointer; max-height: 60px; max-width: 60px; border-radius: 4px;">`
         : '<span class="no-image">No image</span>';
+
+      // Truncate AI description
+      const truncatedDescription = item.ai_description 
+        ? item.ai_description.substring(0, 50) + (item.ai_description.length > 50 ? '...' : '')
+        : 'N/A';
 
       html += `
         <tr>
           <td>${imageHtml}</td>
-          <td>${item.name || 'N/A'}</td>
-          <td>${item.description ? item.description.substring(0, 50) + (item.description.length > 50 ? '...' : '') : 'N/A'}</td>
+          <td>${item.display_name || 'N/A'}</td>
+          <td>${truncatedDescription}</td>
           <td><span class="status-badge status-${item.status || 'pending'}">${(item.status || 'pending').toUpperCase()}</span></td>
           <td>
-            <button class="btn btn-small" onclick="alert('Item ID: ${item.id}')">View</button>
+            <button class="btn btn-small" onclick="openItemActionModal(${item.id}, '${publicImageUrl}', '${item.display_name?.replace(/'/g, "\\'") || ''}', '${item.ai_description?.replace(/'/g, "\\'") || ''}', '${item.status || 'pending'}')">View</button>
           </td>
         </tr>
       `;
@@ -191,7 +197,7 @@ async function loadClaimRequestsTable() {
     console.log('Loading claim requests table...');
     claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
 
-    // Fetch lost reports with matched items (left join with items)
+    // Fetch lost reports with matched items (left join with items) - only pending status
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
       .select(`
@@ -203,8 +209,9 @@ async function loadClaimRequestsTable() {
         created_at,
         ref_photo_url_1,
         matched_item_id,
-        items(id, name, image_url)
+        items(id, display_name, image_url)
       `)
+      .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false });
 
@@ -219,12 +226,15 @@ async function loadClaimRequestsTable() {
     for (const report of reports) {
       const matchedItem = Array.isArray(report.items) && report.items.length > 0 ? report.items[0] : report.items;
 
-      const itemPhotoHtml = matchedItem?.image_url
-        ? `<img src="${matchedItem.image_url}" alt="Item" class="table-thumbnail" onclick="openLightbox('${matchedItem.image_url}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
+      const itemPublicUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
+      const studentPublicUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+
+      const itemPhotoHtml = itemPublicUrl
+        ? `<img src="${itemPublicUrl}" alt="Item" class="table-thumbnail" onclick="openLightbox('${itemPublicUrl}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
         : '<span class="no-image">-</span>';
 
-      const studentPhotoHtml = report.ref_photo_url_1
-        ? `<img src="${report.ref_photo_url_1}" alt="Reference" class="table-thumbnail" onclick="openLightbox('${report.ref_photo_url_1}')" title="Student Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
+      const studentPhotoHtml = studentPublicUrl
+        ? `<img src="${studentPublicUrl}" alt="Reference" class="table-thumbnail" onclick="openLightbox('${studentPublicUrl}')" title="Student Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
         : '<span class="no-image">-</span>';
 
       const requestDate = new Date(report.created_at).toLocaleDateString('en-US', { 
@@ -465,6 +475,108 @@ async function rejectMatch(reportId) {
   }
 }
 
+// ========== SUPABASE URL HELPER ==========
+function getSupabasePublicUrl(imagePath) {
+  if (!imagePath) return '';
+  
+  // If it's already a full URL, return as-is
+  if (imagePath.startsWith('http')) {
+    return imagePath;
+  }
+  
+  // Extract project ID from SUPABASE_URL
+  // Format: https://[PROJECT_ID].supabase.co
+  const supabaseUrl = window.SUPABASE_URL || '';
+  const match = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
+  const projectId = match ? match[1] : 'unknown-project';
+  
+  // Build public URL for items bucket
+  return `https://${projectId}.supabase.co/storage/v1/object/public/items/${imagePath}`;
+}
+
+// ========== ITEM ACTION MODAL ==========
+let currentItemId = null;
+
+function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentStatus) {
+  try {
+    currentItemId = itemId;
+    const modal = document.getElementById('itemActionModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalItemStatus = document.getElementById('modalItemStatus');
+    const modalItemImage = document.getElementById('modalItemImage');
+    const modalItemName = document.getElementById('modalItemName');
+    const modalItemDescription = document.getElementById('modalItemDescription');
+    const statusDropdown = document.getElementById('itemStatusDropdown');
+
+    if (!modal) {
+      console.warn('itemActionModal element not found');
+      return;
+    }
+
+    // Populate modal fields
+    if (modalTitle) modalTitle.textContent = 'Review Item: ' + itemName;
+    if (modalItemStatus) modalItemStatus.textContent = 'Status: ' + (currentStatus || 'pending').toUpperCase();
+    if (modalItemImage) modalItemImage.src = imageUrl || '';
+    if (modalItemName) modalItemName.value = itemName || '';
+    if (modalItemDescription) modalItemDescription.value = aiDescription || '';
+    
+    // Set current status in dropdown
+    if (statusDropdown) {
+      statusDropdown.value = currentStatus || 'pending';
+    }
+
+    // Show modal
+    modal.style.display = 'flex';
+    console.log('Item action modal opened for item ID:', itemId);
+  } catch (error) {
+    console.error('Error opening item action modal:', error);
+  }
+}
+
+function closeItemActionModal() {
+  const modal = document.getElementById('itemActionModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  currentItemId = null;
+}
+
+async function updateItemStatus() {
+  try {
+    if (!currentItemId) {
+      alert('No item selected');
+      return;
+    }
+
+    if (!window.supabaseClient) {
+      console.error('Supabase client not available');
+      return;
+    }
+
+    const statusDropdown = document.getElementById('itemStatusDropdown');
+    const newStatus = statusDropdown?.value || 'pending';
+
+    console.log('Updating item', currentItemId, 'to status:', newStatus);
+
+    const { error } = await window.supabaseClient
+      .from('items')
+      .update({ status: newStatus })
+      .eq('id', currentItemId);
+
+    if (error) throw error;
+
+    console.log('Item status updated successfully');
+    alert('Item status updated to ' + newStatus.toUpperCase());
+    
+    // Refresh the items table
+    await loadItemsTable();
+    closeItemActionModal();
+  } catch (error) {
+    console.error('Error updating item status:', error);
+    alert('Error updating item: ' + error.message);
+  }
+}
+
 // ========== LIGHTBOX ==========
 function openLightbox(imageSrc) {
   const lightbox = document.getElementById('lightbox');
@@ -480,28 +592,6 @@ function closeLightbox() {
   if (lightbox) {
     lightbox.style.display = 'none';
   }
-}
-
-// ========== MODAL FUNCTIONS ==========
-function closeItemActionModal() {
-  const modal = document.getElementById('itemActionModal');
-  if (modal) {
-    modal.style.display = 'none';
-  }
-}
-
-function autoDescribeItem() {
-  alert('AI auto-description feature coming soon');
-}
-
-function approveModalItem() {
-  alert('Item approved');
-  closeItemActionModal();
-}
-
-function rejectModalItem() {
-  alert('Item rejected');
-  closeItemActionModal();
 }
 
 // ========== PROFILE LOADING ==========

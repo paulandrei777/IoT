@@ -206,30 +206,36 @@
       <button class="modal-close" onclick="closeItemActionModal()">&times;</button>
       <div class="modal-header">
         <div>
-          <h3 id="modalTitle">Review Pending Item</h3>
+          <h3 id="modalTitle">Review Item</h3>
           <p class="modal-subtitle" id="modalItemStatus">Status: Pending</p>
         </div>
       </div>
       <div class="modal-body">
         <div class="modal-image-wrapper">
-          <img id="modalItemImage" src="" alt="Pending item image">
+          <img id="modalItemImage" src="" alt="Item image">
         </div>
         <div class="modal-fields">
           <div class="form-group">
             <label for="modalItemName">Item Name</label>
-            <input type="text" id="modalItemName" class="modal-input" placeholder="Enter item name">
+            <input type="text" id="modalItemName" class="modal-input" placeholder="Enter item name" readonly>
           </div>
           <div class="form-group">
-            <label for="modalItemDescription">Description</label>
-            <textarea id="modalItemDescription" class="modal-textarea" rows="5" placeholder="Enter physical description"></textarea>
+            <label for="modalItemDescription">AI Description</label>
+            <textarea id="modalItemDescription" class="modal-textarea" rows="5" placeholder="AI-generated description" readonly></textarea>
           </div>
-          <div class="form-note">Use the AI button to auto-populate values, then edit before approving.</div>
+          <div class="form-group">
+            <label for="itemStatusDropdown">Item Status</label>
+            <select id="itemStatusDropdown" class="modal-input">
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="available">Available</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" id="autoDescribeBtn" onclick="autoDescribeItem()">Auto-Describe with AI</button>
-        <button class="btn btn-success" id="modalApproveBtn" onclick="approveModalItem()">Approve</button>
-        <button class="btn btn-danger" id="modalRejectBtn" onclick="rejectModalItem()">Reject</button>
+        <button class="btn btn-secondary" onclick="closeItemActionModal()">Cancel</button>
+        <button class="btn btn-success" id="modalUpdateBtn" onclick="updateItemStatus()">Update Status</button>
       </div>
     </div>
   </div>
