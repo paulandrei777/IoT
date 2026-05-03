@@ -5,7 +5,10 @@ const API_LOGS_URL = `${API_BASE_URL}/item-logs`;
 
 let allItems = [];
 let lostReports = [];
+let currentUser = null;
 let DEFAULT_IMAGE_URL = null;
+
+console.log('🚀 Admin dashboard script loaded');
 
 // ==================== STORAGE CONFIG ====================
 async function loadStorageConfig() {
@@ -28,6 +31,7 @@ async function fetchItems() {
         allItems = await res.json();
         console.log('✓ Items fetched:', allItems.length);
         updateStatistics();
+        renderItemsTable();
         renderVerificationHub();
     } catch (error) {
         console.error('Error fetching items:', error);
@@ -42,6 +46,7 @@ async function fetchLostReports() {
         lostReports = await res.json();
         console.log('✓ Lost reports fetched:', lostReports.length);
         updateStatistics();
+        renderLostItemsTable();
         renderVerificationHub();
     } catch (error) {
         console.error('Error fetching lost reports:', error);
@@ -156,9 +161,13 @@ async function rejectMatch(reportId) {
 // ==================== AUTHENTICATION ====================
 async function loadUserProfile() {
     try {
+        console.log('📋 Loading user profile...');
         const client = await getSupabaseClient();
         if (!client) {
-            console.error('Supabase client not available');
+            console.error('❌ Supabase client not available');
+            document.getElementById('userName').textContent = 'Not Available';
+            document.getElementById('userEmail').textContent = 'Error';
+            document.getElementById('userRole').textContent = 'Error';
             return;
         }
 
@@ -166,48 +175,192 @@ async function loadUserProfile() {
         const session = data?.session;
         
         if (!session?.user?.id) {
-            console.log('No session found, user not logged in');
+            console.warn('⚠️ No active session found');
+            document.getElementById('userName').textContent = 'Not Logged In';
+            document.getElementById('userEmail').textContent = '';
+            document.getElementById('userRole').textContent = '';
             return;
         }
 
+        currentUser = session.user;
+        console.log('✓ Session found for user:', currentUser.id);
+
         const profile = await getProfile(session.user.id);
-        document.getElementById('userName').textContent = profile.full_name || 'Unknown';
-        document.getElementById('userEmail').textContent = profile.email || 'No email';
-        document.getElementById('userRole').textContent = profile.role || 'No role';
+        console.log('✓ Profile loaded:', profile);
+
+        // Update UI with profile data
+        const userNameEl = document.getElementById('userName');
+        const userEmailEl = document.getElementById('userEmail');
+        const userRoleEl = document.getElementById('userRole');
+
+        if (userNameEl) userNameEl.textContent = profile.full_name || 'Unknown';
+        if (userEmailEl) userEmailEl.textContent = profile.email || 'No email';
+        if (userRoleEl) userRoleEl.textContent = profile.role || 'No role';
+
+        console.log('✅ Profile UI updated successfully');
         
-        console.log('✓ User profile loaded:', profile);
     } catch (error) {
         console.error('❌ Error loading user profile:', error);
-        document.getElementById('userName').textContent = 'Error';
-        document.getElementById('userEmail').textContent = 'Error';
-    }
-}
-
-// ==================== EVENT LISTENERS ====================
-function setupDashboardEventListeners() {
-    const refreshBtn = document.getElementById('refreshBtn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', async () => {
-            console.log('Refreshing dashboard...');
-            await fetchItems();
-            await fetchLostReports();
-        });
-    }
-
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
+        document.getElementById('userName').textContent = 'Error Loading';
+        document.getElementById('userEmail').textContent = error.message;
+        document.getElementById('userRole').textContent = 'Profile Error';
     }
 }
 
 async function handleLogout() {
+    console.log('🔐 Logout initiated');
     try {
-        console.log('Logging out...');
-        await logout();
-        window.location.href = '/login.html';
+        const client = await getSupabaseClient();
+        if (!client) {
+            console.warn('Supabase client not available, redirecting to login');
+            window.location.href = '/login.html';
+            return;
+        }
+
+        await client.auth.signOut();
+        console.log('✓ Sign out successful');
+        showSuccess('Logged out successfully');
+        
+        // Redirect to login page after a brief delay
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 500);
     } catch (error) {
-        console.error('Logout error:', error);
+        console.error('❌ Logout error:', error);
+        // Force redirect even on error
         window.location.href = '/login.html';
+    }
+}
+
+// ==================== ITEM MANAGEMENT ====================
+function renderItemsTable() {
+    const tbody = document.getElementById('itemsTableBody');
+    if (!tbody) return;
+
+    if (!allItems || allItems.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="no-data">No items found in system.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = allItems.map(item => {
+        const imageUrl = item.image_url || DEFAULT_IMAGE_URL;
+        const name = item.display_name || item.name || 'Unknown';
+        const description = (item.ai_description || '').substring(0, 50) + (item.ai_description?.length > 50 ? '...' : '');
+        const statusBadge = `<span class="badge badge-${item.status}">${item.status.toUpperCase()}</span>`;
+        
+        return `
+          <tr>
+            <td><img src="${imageUrl}" alt="${name}" class="item-thumb" onerror="this.src='${DEFAULT_IMAGE_URL}'"></td>
+            <td>${escapeHtml(name)}</td>
+            <td>${escapeHtml(description)}</td>
+            <td>${statusBadge}</td>
+            <td>
+              ${item.status === 'pending' ? `
+                <button class="btn btn-sm btn-success" onclick="approveItemAction('${item.id}')">Approve</button>
+                <button class="btn btn-sm btn-danger" onclick="rejectItemAction('${item.id}')">Reject</button>
+              ` : `<span class="badge">${item.status}</span>`}
+            </td>
+          </tr>
+        `;
+    }).join('');
+}
+
+function renderLostItemsTable() {
+    const tbody = document.getElementById('lostItemsTableBody');
+    if (!tbody) return;
+
+    const pendingReports = lostReports.filter(r => r.status !== 'matched');
+    
+    if (!pendingReports || pendingReports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="no-data">No lost item reports yet.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = pendingReports.map(report => {
+        return `
+          <tr>
+            <td>${escapeHtml(report.student_name || 'Unknown')}</td>
+            <td>${escapeHtml((report.item_description || '').substring(0, 50))}${report.item_description?.length > 50 ? '...' : ''}</td>
+            <td>${escapeHtml(report.last_location || 'Not specified')}</td>
+            <td><span class="badge badge-${report.status}">${report.status.toUpperCase()}</span></td>
+            <td>
+              <button class="btn btn-sm btn-info" onclick="viewReportDetails('${report.id}')">View</button>
+            </td>
+          </tr>
+        `;
+    }).join('');
+}
+
+function renderClaimRequestsTable() {
+    const tbody = document.getElementById('claimRequestsTableBody');
+    if (!tbody) return;
+
+    // For now, show empty message - claim requests are tracked via item_logs
+    tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending claim requests at this time.</td></tr>';
+}
+
+async function approveItemAction(itemId) {
+    try {
+        console.log('Approving item:', itemId);
+        const res = await fetch(`${API_ITEMS_URL}/${itemId}/approve`, { 
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) throw new Error('Failed to approve item');
+        
+        showSuccess('Item approved successfully');
+        await fetchItems();
+    } catch (error) {
+        console.error('Error approving item:', error);
+        showError('Failed to approve item: ' + error.message);
+    }
+}
+
+async function rejectItemAction(itemId) {
+    try {
+        console.log('Rejecting item:', itemId);
+        const res = await fetch(`${API_ITEMS_URL}/${itemId}/reject`, { 
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) throw new Error('Failed to reject item');
+        
+        showSuccess('Item rejected successfully');
+        await fetchItems();
+    } catch (error) {
+        console.error('Error rejecting item:', error);
+        showError('Failed to reject item: ' + error.message);
+    }
+}
+
+function viewReportDetails(reportId) {
+    const report = lostReports.find(r => r.id === reportId);
+    if (!report) return;
+    
+    console.log('Viewing report:', report);
+    alert(`Report from: ${report.student_name}\nEmail: ${report.student_email}\nDescription: ${report.item_description}`);
+}
+
+// ==================== SECTION NAVIGATION ====================
+function showSection(sectionName) {
+    console.log('Switching to section:', sectionName);
+    
+    // Hide all sections
+    document.getElementById('itemManagementSection')?.style.setProperty('display', 'none', 'important');
+    document.getElementById('lostItemsSection')?.style.setProperty('display', 'none', 'important');
+    document.getElementById('claimRequestsSection')?.style.setProperty('display', 'none', 'important');
+    
+    // Show selected section
+    switch(sectionName) {
+        case 'itemManagement':
+            document.getElementById('itemManagementSection')?.style.setProperty('display', 'block', 'important');
+            break;
+        case 'lostItems':
+            document.getElementById('lostItemsSection')?.style.setProperty('display', 'block', 'important');
+            break;
+        case 'claimRequests':
+            document.getElementById('claimRequestsSection')?.style.setProperty('display', 'block', 'important');
+            break;
     }
 }
 
@@ -270,6 +423,35 @@ function openLightbox(src, alt) {
 function closeLightbox() {
     const lightbox = document.getElementById('lightbox');
     if (lightbox) lightbox.classList.remove('active');
+}
+
+// ==================== EVENT LISTENERS ====================
+function setupDashboardEventListeners() {
+    console.log('⚙️ Setting up dashboard event listeners...');
+    
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            console.log('🔄 Refreshing dashboard...');
+            await fetchItems();
+            await fetchLostReports();
+        });
+        console.log('✓ Refresh button listener attached');
+    }
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        console.log('✓ Found logout button, attaching listener');
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔐 Logout button clicked');
+            handleLogout();
+        });
+        console.log('✓ Logout button listener attached');
+    } else {
+        console.warn('⚠️ Logout button not found in DOM');
+    }
 }
 
 // ==================== INITIALIZATION ====================

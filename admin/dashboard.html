@@ -37,6 +37,18 @@
           <i class="fas fa-tachometer-alt"></i>
           <span>Dashboard</span>
         </a>
+        <a href="#" class="nav-link" onclick="showSection('itemManagement')">
+          <i class="fas fa-box"></i>
+          <span>Item Management</span>
+        </a>
+        <a href="#" class="nav-link" onclick="showSection('lostItems')">
+          <i class="fas fa-search"></i>
+          <span>Lost Items</span>
+        </a>
+        <a href="#" class="nav-link" onclick="showSection('claimRequests')">
+          <i class="fas fa-hands-helping"></i>
+          <span>Claim Requests</span>
+        </a>
         <a href="/admin/auditLogs.html" class="nav-link">
           <i class="fas fa-history"></i>
           <span>Audit Logs</span>
@@ -101,6 +113,78 @@
           </button>
         </div>
       </div>
+
+      <!-- Item Management Section -->
+      <section class="admin-section" id="itemManagementSection">
+        <h2>Item Management</h2>
+        <p class="section-description">Review and manage lost items in the system.</p>
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Image</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="itemsTableBody">
+              <tr>
+                <td colspan="5" class="no-data">Loading items...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Lost Items Section -->
+      <section class="admin-section" id="lostItemsSection" style="display: none;">
+        <h2>Lost Reports</h2>
+        <p class="section-description">View all student lost item reports submitted through the blind search system.</p>
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th>Item Description</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="lostItemsTableBody">
+              <tr>
+                <td colspan="5" class="no-data">Loading reports...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Claim Requests Section -->
+      <section class="admin-section" id="claimRequestsSection" style="display: none;">
+        <h2>Claim Requests</h2>
+        <p class="section-description">Review and process item claim requests from students.</p>
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Student Email</th>
+                <th>Request Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="claimRequestsTableBody">
+              <tr>
+                <td colspan="5" class="no-data">No pending claim requests.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="admin-section">
         <h2>Match Verification Hub</h2>
