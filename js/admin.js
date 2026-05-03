@@ -10,6 +10,8 @@ let verificationContainer;
 let currentSection = 'dashboard';
 
 // ========== SECTION SWITCHING ==========
+let currentStatusFilter = 'all';
+
 function showSection(sectionId) {
   try {
     console.log('Switching to section:', sectionId);
@@ -56,6 +58,41 @@ function showSection(sectionId) {
   }
 }
 
+// ========== STATUS FILTER CONTROLS ==========
+function addStatusFilterControls() {
+  const section = document.getElementById('itemManagementSection');
+  let filterContainer = document.getElementById('statusFilterContainer');
+  
+  // Only add filter once
+  if (filterContainer) return;
+  
+  if (!section) return;
+  
+  filterContainer = document.createElement('div');
+  filterContainer.id = 'statusFilterContainer';
+  filterContainer.className = 'filter-controls';
+  filterContainer.innerHTML = `
+    <label for="statusFilterDropdown">Filter by Status:</label>
+    <select id="statusFilterDropdown" class="status-filter-select" onchange="changeStatusFilter(this.value)">
+      <option value="all">All Items</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="claimed">Claimed</option>
+    </select>
+  `;
+  
+  // Insert after description
+  const description = section.querySelector('.section-description');
+  if (description) {
+    description.parentNode.insertBefore(filterContainer, description.nextSibling);
+  }
+}
+
+function changeStatusFilter(status) {
+  currentStatusFilter = status;
+  loadItemsTable();
+}
+
 // ========== ITEMS TABLE LOADING ==========
 async function loadItemsTable() {
   try {
@@ -70,14 +107,24 @@ async function loadItemsTable() {
       return;
     }
 
-    console.log('Loading items table...');
+    console.log('Loading items table with status filter:', currentStatusFilter);
     itemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading items...</td></tr>';
 
-    // Fetch all items
-    const { data: items, error } = await window.supabaseClient
+    // Add filter controls
+    addStatusFilterControls();
+
+    // Build query with optional status filter
+    let query = window.supabaseClient
       .from('items')
       .select('*')
       .order('created_at', { ascending: false });
+
+    // Apply status filter if not 'all'
+    if (currentStatusFilter !== 'all') {
+      query = query.eq('status', currentStatusFilter);
+    }
+
+    const { data: items, error } = await query;
 
     if (error) throw error;
 
@@ -106,7 +153,7 @@ async function loadItemsTable() {
           <td>${truncatedDescription}</td>
           <td><span class="status-badge status-${item.status || 'pending'}">${(item.status || 'pending').toUpperCase()}</span></td>
           <td>
-            <button class="btn btn-small" onclick="openItemActionModal(${item.id}, '${publicImageUrl}', '${item.display_name?.replace(/'/g, "\\'") || ''}', '${item.ai_description?.replace(/'/g, "\\'") || ''}', '${item.status || 'pending'}')">View</button>
+            <button class="btn btn-small" data-item-id="${item.id}" data-image-url="${publicImageUrl}" data-item-name="${item.display_name || ''}" data-item-desc="${item.ai_description || ''}" data-item-status="${item.status || 'pending'}" onclick="handleViewClick(this)">View</button>
           </td>
         </tr>
       `;
@@ -496,6 +543,15 @@ function getSupabasePublicUrl(imagePath) {
 
 // ========== ITEM ACTION MODAL ==========
 let currentItemId = null;
+
+function handleViewClick(button) {
+  const itemId = button.dataset.itemId;
+  const imageUrl = button.dataset.imageUrl;
+  const itemName = button.dataset.itemName;
+  const aiDesc = button.dataset.itemDesc;
+  const status = button.dataset.itemStatus;
+  openItemActionModal(itemId, imageUrl, itemName, aiDesc, status);
+}
 
 function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentStatus) {
   try {
