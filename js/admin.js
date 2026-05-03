@@ -1,4 +1,4 @@
-const supabase = window.supabaseClient || window.supabase;
+var supabase = window.supabaseClient || window.supabase;
 
 // I-check kung gumagana na
 console.log("Checking Supabase connection...");
