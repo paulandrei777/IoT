@@ -117,6 +117,8 @@ function renderSearchResult({ matched_item_id, match_score }) {
   searchResultContainer.innerHTML = '';
   const normalizedScore = Number(match_score) || 0;
 
+  console.log('AI Match Score:', normalizedScore);
+  
   if (normalizedScore >= 70) {
     // High match score - show success card
     searchResultContainer.innerHTML = `
@@ -289,15 +291,18 @@ async function uploadReferencePhoto(file) {
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `reference_${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
 
+    const bucketName = 'reference-photos';
+    console.log('Bucket Name Used:', bucketName);
+
     const { data, error } = await window.supabaseClient.storage
-      .from('reference_photos')
+      .from(bucketName)
       .upload(fileName, file, { cacheControl: '3600', upsert: false });
 
     if (error) {
       throw error;
     }
 
-    return `${window.SUPABASE_URL}/storage/v1/object/public/reference_photos/${encodeURIComponent(fileName)}`;
+    return `${window.SUPABASE_URL}/storage/v1/object/public/reference-photos/${encodeURIComponent(fileName)}`;
   } catch (error) {
     console.error('Photo upload error:', error);
     throw new Error('Failed to upload reference photo: ' + error.message);
@@ -381,9 +386,13 @@ async function submitLostReport(event) {
     if (reportSection) reportSection.hidden = true;
     if (reportSuccessPanel) reportSuccessPanel.hidden = false;
     
+    // Clear match state after successful submission
+    matchState.matched_item_id = null;
+    matchState.match_score = 0;
+    
     setStatusMessage(
       reportFormMessage,
-      'Report submitted successfully. We will notify you once the item is turned in.',
+      'Your report has been filed. Our Admin will verify the match and contact you.',
       'success'
     );
 

@@ -112,7 +112,7 @@ const calculateMatchScoresWithGemini = async (studentDescription, items) => {
     display_name: item.display_name || '',
   }));
 
-  const prompt = `You are a secure lost-and-found match assistant. Compare the student's item description against each stored item description below. Return only valid JSON with a root object containing a 'matches' array. Each item in the array must use the fields: id, match_score. The match_score must be an integer from 0 to 100. Do not include any additional text or explanation.\n\nstudent_description:\n${studentDescription.trim()}\n\nitems:\n${JSON.stringify(candidates, null, 2)}`;
+  const prompt = `You are a lost-and-found matching assistant. Compare the student's description with the stored item descriptions. If there is ANY semantic match (e.g., 'blue wallet' matches 'wallet blue', 'red backpack' matches 'backpack with red color'), provide a match_score. Be lenient with matching - prioritize semantic similarity over exact wording.\n\nReturn ONLY valid JSON with a root object containing a 'matches' array. Each item must have: id, match_score (integer 0-100). No additional text or explanation.\n\nstudent_description:\n${studentDescription.trim()}\n\nitems:\n${JSON.stringify(candidates, null, 2)}`;
 
   const requestPayload = {
     contents: [{
