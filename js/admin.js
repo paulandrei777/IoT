@@ -1,472 +1,614 @@
-﻿const API_BASE_URL = 'https://iot-production-17b1.up.railway.app/api';
-const API_ITEMS_URL = `${API_BASE_URL}/items`;
-const API_LOST_REPORTS_URL = `${API_BASE_URL}/items/lost-reports`;
-const API_LOGS_URL = `${API_BASE_URL}/item-logs`;
+﻿// API Configuration
+const API_URL = "https://iot-production-17b1.up.railway.app/api/items";
 
-let allItems = [];
-let lostReports = [];
-let currentUser = null;
-let DEFAULT_IMAGE_URL = null;
+// DOM Elements (will be initialized in DOMContentLoaded)
+let itemDescriptionTextarea;
+let dateMissingInput;
+let timeMissingInput;
+let lastLocationInput;
+let searchBtn;
+let searchStatus;
+let searchResultContainer;
+let reportSection;
+let reportForm;
+let studentNameInput;
+let contactNumberInput;
+let studentEmailInput;
+let reportItemDescriptionTextarea;
+let reportDateMissingInput;
+let reportTimeMissingInput;
+let reportLastLocationInput;
+let refPhotoFile1Input;
+let refPhotoFile2Input;
+let matchedItemIdInput;
+let matchScoreInput;
+let submitReportBtn;
+let cancelReportBtn;
+let reportFormMessage;
+let reportSuccessPanel;
+let sidebarToggle;
+let sidebarBackdrop;
+let logoutBtn;
 
-console.log('🚀 Admin dashboard script loaded');
+// App State
+let currentSection = 'dashboard';
 
-// ==================== STORAGE CONFIG ====================
-async function loadStorageConfig() {
-    try {
-        const response = await fetch('/api/config/storage');
-        const data = await response.json();
-        DEFAULT_IMAGE_URL = data.defaultImageUrl;
-        console.log('✓ [ADMIN] Default image URL loaded:', DEFAULT_IMAGE_URL);
-    } catch (error) {
-        console.error('❌ [ADMIN] Failed to load storage config:', error);
-        DEFAULT_IMAGE_URL = `${window.SUPABASE_URL}/storage/v1/object/public/items/default.png`;
-    }
-}
+const matchState = {
+  matched_item_id: null,
+  match_score: 0,
+  item_description: '',
+  date_missing: '',
+  time_missing: '',
+  last_location: '',
+};
 
-// ==================== FETCH DATA ====================
-async function fetchItems() {
-    try {
-        const res = await fetch(API_ITEMS_URL);
-        if (!res.ok) throw new Error('Failed to fetch items');
-        allItems = await res.json();
-        console.log('✓ Items fetched:', allItems.length);
-        updateStatistics();
-        renderItemsTable();
-        renderVerificationHub();
-    } catch (error) {
-        console.error('Error fetching items:', error);
-        showError('Failed to load items. Please try again.');
-    }
-}
+// ========== PROFILE LOADING ==========
 
-async function fetchLostReports() {
-    try {
-        const res = await fetch(API_LOST_REPORTS_URL);
-        if (!res.ok) throw new Error('Failed to fetch lost reports');
-        lostReports = await res.json();
-        console.log('✓ Lost reports fetched:', lostReports.length);
-        updateStatistics();
-        renderLostItemsTable();
-        renderVerificationHub();
-    } catch (error) {
-        console.error('Error fetching lost reports:', error);
-        showError('Failed to load reports. Please try again.');
-    }
-}
-
-// ==================== STATISTICS ====================
-function updateStatistics() {
-    const totalItems = allItems.length;
-    const pendingItems = allItems.filter(item => item.status === 'pending').length;
-    const approvedItems = allItems.filter(item => item.status === 'approved').length;
-    const claimedItems = allItems.filter(item => item.status === 'claimed').length;
-    const pendingReports = lostReports.filter(report => report.status === 'pending').length;
-    const matchedReports = lostReports.filter(report => report.status === 'matched').length;
-
-    document.getElementById('totalItems').textContent = totalItems;
-    document.getElementById('pendingReports').textContent = pendingReports;
-    document.getElementById('matchedReports').textContent = matchedReports;
-
-    console.log('📊 Dashboard Stats Updated:', { totalItems, pendingItems, approvedItems, claimedItems, pendingReports, matchedReports });
-}
-
-// ==================== VERIFICATION HUB ====================
-function renderVerificationHub() {
-    const container = document.getElementById('verificationContainer');
-    if (!container) return;
-
-    const pendingMatches = lostReports.filter(report => report.matched_item_id && report.status === 'pending');
-    container.innerHTML = '';
-
-    if (!pendingMatches.length) {
-        container.innerHTML = `
-            <div class="empty-state">
-              <i class="fas fa-search"></i>
-              <h3>No AI matches pending verification</h3>
-              <p>Reports with matched items will appear here for admin verification.</p>
-            </div>
-        `;
-        return;
+async function loadUserProfile() {
+  try {
+    if (!window.supabaseClient) {
+      console.warn('Supabase client not available for profile loading');
+      return;
     }
 
-    pendingMatches.forEach(report => {
-        container.appendChild(createVerificationCard(report));
-    });
+    const { data } = await window.supabaseClient.auth.getSession();
+    const session = data?.session;
+    
+    if (!session?.user?.id) {
+      console.log('No active session for profile loading');
+      return;
+    }
+
+    // Fetch profile using the getProfile function from auth.js
+    if (typeof getProfile !== 'function') {
+      console.warn('getProfile function not available');
+      return;
+    }
+
+    const profile = await getProfile(session.user.id);
+    
+    // Update UI with profile data
+    const userNameEl = document.getElementById('userName');
+    if (userNameEl) {
+      userNameEl.textContent = profile?.full_name || 'Student';
+    } else {
+      console.warn('userName element not found');
+    }
+
+    // Pre-fill form with user data
+    if (studentNameInput && profile?.full_name) {
+      studentNameInput.value = profile.full_name;
+    }
+    if (studentEmailInput && profile?.email) {
+      studentEmailInput.value = profile.email;
+    }
+
+    console.log('Profile loaded successfully');
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    // Continue gracefully - loading is not critical
+  }
 }
 
-function createVerificationCard(report) {
-    const item = allItems.find(i => i.id === report.matched_item_id) || {};
-    const card = document.createElement('div');
-    card.className = 'verification-card';
+// ========== STATUS MESSAGES ==========
 
-    const itemImage = item.image_url || DEFAULT_IMAGE_URL;
-    const itemName = item.display_name || item.name || 'Matched Item';
-    const itemDescription = item.ai_description || 'No AI description available.';
-    const studentPhotos = [report.ref_photo_url_1, report.ref_photo_url_2].filter(Boolean);
+function setStatusMessage(element, message, type = 'info') {
+  if (!element) {
+    console.warn('Status message element is null');
+    return;
+  }
+  
+  element.textContent = message;
+  element.className = 'status-message';
+  
+  if (message) {
+    element.classList.add(`status-message--${type}`);
+  }
+}
 
-    card.innerHTML = `
-      <div class="verification-side verification-side--left">
-        <h3>Matched Office Item</h3>
-        <img src="${itemImage}" alt="${itemName}" onerror="this.src='${DEFAULT_IMAGE_URL}'">
-        <p class="verification-label">AI Description</p>
-        <p class="verification-text">${escapeHtml(itemDescription)}</p>
-      </div>
-      <div class="verification-side verification-side--center">
-        <div class="match-score">AI Confidence: ${Number(report.match_score) || 0}%</div>
-        <button class="btn btn-success" onclick="approveMatch('${report.id}')">Approve Match</button>
-        <button class="btn btn-danger" onclick="rejectMatch('${report.id}')">Reject Match</button>
-      </div>
-      <div class="verification-side verification-side--right">
-        <h3>Student Report</h3>
-        <p><strong>${escapeHtml(report.student_name)}</strong></p>
-        <p><strong>Email:</strong> ${escapeHtml(report.student_email)}</p>
-        <p><strong>Location:</strong> ${escapeHtml(report.last_location || 'Unknown')}</p>
-        <p class="verification-label">Student Description</p>
-        <p class="verification-text">${escapeHtml(report.item_description)}</p>
-        <div class="student-photos">
-          ${studentPhotos.length ? studentPhotos.map(url => `<img src="${url}" alt="Student reference photo" onerror="this.src='${DEFAULT_IMAGE_URL}'">`).join('') : '<p>No reference photos provided.</p>'}
+// ========== SEARCH RESULT RENDERING ==========
+
+function renderSearchResult({ matched_item_id, match_score }) {
+  if (!searchResultContainer) {
+    console.warn('searchResultContainer element not found');
+    return;
+  }
+
+  searchResultContainer.innerHTML = '';
+  const normalizedScore = Number(match_score) || 0;
+
+  if (normalizedScore >= 70) {
+    // High match score - show success card
+    searchResultContainer.innerHTML = `
+      <div class="match-score-card">
+        <h3>Match Found!</h3>
+        <div class="match-score-percentage">${normalizedScore}</div>
+        <p>We found an item in our office that closely matches your description.</p>
+        <div class="match-actions">
+          <button class="btn btn-success" id="verifyReportBtn">Verify & File Report</button>
         </div>
       </div>
     `;
 
-    return card;
-}
-
-async function approveMatch(reportId) {
-    try {
-        const response = await fetch(`${API_LOST_REPORTS_URL}/${reportId}/approve-match`, { method: 'PATCH' });
-        if (!response.ok) throw new Error('Failed to approve match');
-
-        showSuccess('Match approved successfully!');
-        await fetchLostReports();
-    } catch (error) {
-        console.error('Error approving match:', error);
-        showError(error.message || 'Failed to approve match.');
+    // Attach event listener to dynamically created button
+    const verifyBtn = document.getElementById('verifyReportBtn');
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', showReportForm);
     }
-}
+  } else {
+    // No match - show no match message
+    searchResultContainer.innerHTML = `
+      <div class="no-match-message">
+        <p>No immediate match found in our system.</p>
+        <p>You can still file a formal report so we can notify you once your item is turned in.</p>
+        <div class="match-actions">
+          <button class="btn btn-secondary" id="fileReportBtn">File a Formal Report</button>
+        </div>
+      </div>
+    `;
 
-async function rejectMatch(reportId) {
-    try {
-        const response = await fetch(`${API_LOST_REPORTS_URL}/${reportId}/reject-match`, { method: 'PATCH' });
-        if (!response.ok) throw new Error('Failed to reject match');
-
-        showSuccess('Match rejected. Report reset to searching.');
-        await fetchLostReports();
-    } catch (error) {
-        console.error('Error rejecting match:', error);
-        showError(error.message || 'Failed to reject match.');
+    // Attach event listener to dynamically created button
+    const fileReportBtn = document.getElementById('fileReportBtn');
+    if (fileReportBtn) {
+      fileReportBtn.addEventListener('click', showReportForm);
     }
+  }
 }
 
-// ==================== AUTHENTICATION ====================
-async function loadUserProfile() {
-    try {
-        console.log('📋 Loading user profile...');
-        const client = await getSupabaseClient();
-        if (!client) {
-            console.error('❌ Supabase client not available');
-            document.getElementById('userName').textContent = 'Not Available';
-            document.getElementById('userEmail').textContent = 'Error';
-            document.getElementById('userRole').textContent = 'Error';
-            return;
-        }
+// ========== BLIND SEARCH ==========
 
-        const { data } = await client.auth.getSession();
-        const session = data?.session;
-        
-        if (!session?.user?.id) {
-            console.warn('⚠️ No active session found');
-            document.getElementById('userName').textContent = 'Not Logged In';
-            document.getElementById('userEmail').textContent = '';
-            document.getElementById('userRole').textContent = '';
-            return;
-        }
-
-        currentUser = session.user;
-        console.log('✓ Session found for user:', currentUser.id);
-
-        const profile = await getProfile(session.user.id);
-        console.log('✓ Profile loaded:', profile);
-
-        // Update UI with profile data
-        const userNameEl = document.getElementById('userName');
-        const userEmailEl = document.getElementById('userEmail');
-        const userRoleEl = document.getElementById('userRole');
-
-        if (userNameEl) userNameEl.textContent = profile.full_name || 'Unknown';
-        if (userEmailEl) userEmailEl.textContent = profile.email || 'No email';
-        if (userRoleEl) userRoleEl.textContent = profile.role || 'No role';
-
-        console.log('✅ Profile UI updated successfully');
-        
-    } catch (error) {
-        console.error('❌ Error loading user profile:', error);
-        document.getElementById('userName').textContent = 'Error Loading';
-        document.getElementById('userEmail').textContent = error.message;
-        document.getElementById('userRole').textContent = 'Profile Error';
-    }
-}
-
-async function handleLogout() {
-    console.log('🔐 Logout initiated');
-    try {
-        const client = await getSupabaseClient();
-        if (!client) {
-            console.warn('Supabase client not available, redirecting to login');
-            window.location.href = '/login.html';
-            return;
-        }
-
-        await client.auth.signOut();
-        console.log('✓ Sign out successful');
-        showSuccess('Logged out successfully');
-        
-        // Redirect to login page after a brief delay
-        setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 500);
-    } catch (error) {
-        console.error('❌ Logout error:', error);
-        // Force redirect even on error
-        window.location.href = '/login.html';
-    }
-}
-
-// ==================== ITEM MANAGEMENT ====================
-function renderItemsTable() {
-    const tbody = document.getElementById('itemsTableBody');
-    if (!tbody) return;
-
-    if (!allItems || allItems.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="no-data">No items found in system.</td></tr>';
-        return;
+async function searchBlindMatch() {
+  try {
+    if (!itemDescriptionTextarea) {
+      console.error('itemDescriptionTextarea element not found');
+      return;
     }
 
-    tbody.innerHTML = allItems.map(item => {
-        const imageUrl = item.image_url || DEFAULT_IMAGE_URL;
-        const name = item.display_name || item.name || 'Unknown';
-        const description = (item.ai_description || '').substring(0, 50) + (item.ai_description?.length > 50 ? '...' : '');
-        const statusBadge = `<span class="badge badge-${item.status}">${item.status.toUpperCase()}</span>`;
-        
-        return `
-          <tr>
-            <td><img src="${imageUrl}" alt="${name}" class="item-thumb" onerror="this.src='${DEFAULT_IMAGE_URL}'"></td>
-            <td>${escapeHtml(name)}</td>
-            <td>${escapeHtml(description)}</td>
-            <td>${statusBadge}</td>
-            <td>
-              ${item.status === 'pending' ? `
-                <button class="btn btn-sm btn-success" onclick="approveItemAction('${item.id}')">Approve</button>
-                <button class="btn btn-sm btn-danger" onclick="rejectItemAction('${item.id}')">Reject</button>
-              ` : `<span class="badge">${item.status}</span>`}
-            </td>
-          </tr>
-        `;
-    }).join('');
-}
+    const item_description = itemDescriptionTextarea.value.trim();
+    const date_missing = dateMissingInput?.value || '';
+    const time_missing = timeMissingInput?.value || '';
+    const last_location = lastLocationInput?.value.trim() || '';
 
-function renderLostItemsTable() {
-    const tbody = document.getElementById('lostItemsTableBody');
-    if (!tbody) return;
-
-    const pendingReports = lostReports.filter(r => r.status !== 'matched');
-    
-    if (!pendingReports || pendingReports.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="no-data">No lost item reports yet.</td></tr>';
-        return;
+    if (!item_description) {
+      setStatusMessage(searchStatus, 'Please describe the lost item before searching.', 'error');
+      itemDescriptionTextarea.focus();
+      return;
     }
 
-    tbody.innerHTML = pendingReports.map(report => {
-        return `
-          <tr>
-            <td>${escapeHtml(report.student_name || 'Unknown')}</td>
-            <td>${escapeHtml((report.item_description || '').substring(0, 50))}${report.item_description?.length > 50 ? '...' : ''}</td>
-            <td>${escapeHtml(report.last_location || 'Not specified')}</td>
-            <td><span class="badge badge-${report.status}">${report.status.toUpperCase()}</span></td>
-            <td>
-              <button class="btn btn-sm btn-info" onclick="viewReportDetails('${report.id}')">View</button>
-            </td>
-          </tr>
-        `;
-    }).join('');
-}
+    if (searchBtn) searchBtn.disabled = true;
+    setStatusMessage(searchStatus, 'Searching for the best blind match...', 'info');
 
-function renderClaimRequestsTable() {
-    const tbody = document.getElementById('claimRequestsTableBody');
-    if (!tbody) return;
-
-    // For now, show empty message - claim requests are tracked via item_logs
-    tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending claim requests at this time.</td></tr>';
-}
-
-async function approveItemAction(itemId) {
-    try {
-        console.log('Approving item:', itemId);
-        const res = await fetch(`${API_ITEMS_URL}/${itemId}/approve`, { 
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) throw new Error('Failed to approve item');
-        
-        showSuccess('Item approved successfully');
-        await fetchItems();
-    } catch (error) {
-        console.error('Error approving item:', error);
-        showError('Failed to approve item: ' + error.message);
-    }
-}
-
-async function rejectItemAction(itemId) {
-    try {
-        console.log('Rejecting item:', itemId);
-        const res = await fetch(`${API_ITEMS_URL}/${itemId}/reject`, { 
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) throw new Error('Failed to reject item');
-        
-        showSuccess('Item rejected successfully');
-        await fetchItems();
-    } catch (error) {
-        console.error('Error rejecting item:', error);
-        showError('Failed to reject item: ' + error.message);
-    }
-}
-
-function viewReportDetails(reportId) {
-    const report = lostReports.find(r => r.id === reportId);
-    if (!report) return;
-    
-    console.log('Viewing report:', report);
-    alert(`Report from: ${report.student_name}\nEmail: ${report.student_email}\nDescription: ${report.item_description}`);
-}
-
-// ==================== SECTION NAVIGATION ====================
-function showSection(sectionName) {
-    console.log('Switching to section:', sectionName);
-    
-    // Hide all sections
-    document.getElementById('itemManagementSection')?.style.setProperty('display', 'none', 'important');
-    document.getElementById('lostItemsSection')?.style.setProperty('display', 'none', 'important');
-    document.getElementById('claimRequestsSection')?.style.setProperty('display', 'none', 'important');
-    
-    // Show selected section
-    switch(sectionName) {
-        case 'itemManagement':
-            document.getElementById('itemManagementSection')?.style.setProperty('display', 'block', 'important');
-            break;
-        case 'lostItems':
-            document.getElementById('lostItemsSection')?.style.setProperty('display', 'block', 'important');
-            break;
-        case 'claimRequests':
-            document.getElementById('claimRequestsSection')?.style.setProperty('display', 'block', 'important');
-            break;
-    }
-}
-
-function setupMobileMenu() {
-    const hamburgerBtn = document.getElementById('hamburgerBtn');
-    const sidebarClose = document.getElementById('sidebarClose');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    const sidebar = document.getElementById('sidebar');
-    const navLinks = document.querySelectorAll('.nav-link');
-
-    if (!hamburgerBtn || !sidebar || !sidebarOverlay) return;
-
-    hamburgerBtn.addEventListener('click', () => {
-        sidebar.classList.add('open');
-        sidebarOverlay.classList.add('active');
+    const response = await fetch(`${API_URL}/blind-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_description, date_missing, time_missing, last_location }),
     });
 
-    if (sidebarClose) {
-        sidebarClose.addEventListener('click', closeMobileMenu);
-    }
-
-    sidebarOverlay.addEventListener('click', closeMobileMenu);
-    navLinks.forEach(link => link.addEventListener('click', closeMobileMenu));
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeMobileMenu();
-    });
-}
-
-function closeMobileMenu() {
-    const sidebar = document.getElementById('sidebar');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    if (sidebar) sidebar.classList.remove('open');
-    if (sidebarOverlay) sidebarOverlay.classList.remove('active');
-}
-
-// ==================== UTILITIES ====================
-function escapeHtml(value) {
-    return String(value || '').replace(/[&<>"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[tag]));
-}
-
-function showError(message) {
-    console.error('❌ Error:', message);
-    alert(message);
-}
-
-function showSuccess(message) {
-    console.log('✓ Success:', message);
-    alert(message);
-}
-
-function openLightbox(src, alt) {
-    const lightbox = document.getElementById('lightbox');
-    const lightboxImg = document.getElementById('lightbox-img');
-    if (!lightbox || !lightboxImg) return;
-    lightboxImg.src = src;
-    lightboxImg.alt = alt;
-    lightbox.classList.add('active');
-}
-
-function closeLightbox() {
-    const lightbox = document.getElementById('lightbox');
-    if (lightbox) lightbox.classList.remove('active');
-}
-
-// ==================== EVENT LISTENERS ====================
-function setupDashboardEventListeners() {
-    console.log('⚙️ Setting up dashboard event listeners...');
+    const result = await response.json();
     
-    const refreshBtn = document.getElementById('refreshBtn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', async () => {
-            console.log('🔄 Refreshing dashboard...');
-            await fetchItems();
-            await fetchLostReports();
-        });
-        console.log('✓ Refresh button listener attached');
+    if (!response.ok) {
+      throw new Error(result.error || 'Blind match search failed');
     }
 
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        console.log('✓ Found logout button, attaching listener');
-        logoutBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('🔐 Logout button clicked');
-            handleLogout();
-        });
-        console.log('✓ Logout button listener attached');
+    // Save match state for later use
+    matchState.matched_item_id = result.matched_item_id || null;
+    matchState.match_score = Number(result.match_score) || 0;
+    matchState.item_description = item_description;
+    matchState.date_missing = date_missing;
+    matchState.time_missing = time_missing;
+    matchState.last_location = last_location;
+
+    // Pre-fill hidden report form fields
+    if (matchedItemIdInput) matchedItemIdInput.value = matchState.matched_item_id || '';
+    if (matchScoreInput) matchScoreInput.value = matchState.match_score;
+    if (reportItemDescriptionTextarea) reportItemDescriptionTextarea.value = item_description;
+    if (reportDateMissingInput) reportDateMissingInput.value = date_missing;
+    if (reportTimeMissingInput) reportTimeMissingInput.value = time_missing;
+    if (reportLastLocationInput) reportLastLocationInput.value = last_location;
+
+    // Render result
+    renderSearchResult(result);
+    setStatusMessage(searchStatus, 'Search completed.', 'success');
+    
+  } catch (error) {
+    console.error('Blind search error:', error);
+    renderSearchResult({ matched_item_id: null, match_score: 0 });
+    setStatusMessage(searchStatus, error.message || 'Unable to perform blind match search.', 'error');
+  } finally {
+    if (searchBtn) searchBtn.disabled = false;
+  }
+}
+
+// ========== REPORT FORM DISPLAY ==========
+
+function showReportForm() {
+  try {
+    if (!reportSection) {
+      console.warn('reportSection element not found');
+      return;
+    }
+
+    // Show report section
+    reportSection.hidden = false;
+    
+    // Hide success panel if it exists
+    if (reportSuccessPanel) {
+      reportSuccessPanel.hidden = true;
+    }
+
+    // Show info message
+    setStatusMessage(
+      reportFormMessage,
+      'Complete the report form and submit it. Your match score has been preserved.',
+      'info'
+    );
+
+    // Pre-fill with saved match state
+    if (reportItemDescriptionTextarea) reportItemDescriptionTextarea.value = matchState.item_description;
+    if (reportDateMissingInput) reportDateMissingInput.value = matchState.date_missing;
+    if (reportTimeMissingInput) reportTimeMissingInput.value = matchState.time_missing;
+    if (reportLastLocationInput) reportLastLocationInput.value = matchState.last_location;
+    if (matchedItemIdInput) matchedItemIdInput.value = matchState.matched_item_id || '';
+    if (matchScoreInput) matchScoreInput.value = matchState.match_score;
+
+    // Scroll to form
+    if (reportFormMessage) {
+      reportFormMessage.scrollIntoView({ behavior: 'smooth' });
+    }
+  } catch (error) {
+    console.error('Error showing report form:', error);
+  }
+}
+
+// ========== REPORT FORM HIDE ==========
+
+function hideReportForm() {
+  try {
+    if (reportSection) {
+      reportSection.hidden = true;
+    }
+    if (reportSuccessPanel) {
+      reportSuccessPanel.hidden = true;
+    }
+    setStatusMessage(reportFormMessage, '', 'info');
+  } catch (error) {
+    console.error('Error hiding report form:', error);
+  }
+}
+
+// ========== PHOTO UPLOAD ==========
+
+async function uploadReferencePhoto(file) {
+  if (!file) return '';
+
+  try {
+    if (!window.supabaseClient) {
+      throw new Error('Supabase client not available');
+    }
+
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `reference_${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+
+    const { data, error } = await window.supabaseClient.storage
+      .from('reference_photos')
+      .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+    if (error) {
+      throw error;
+    }
+
+    return `${window.SUPABASE_URL}/storage/v1/object/public/reference_photos/${encodeURIComponent(fileName)}`;
+  } catch (error) {
+    console.error('Photo upload error:', error);
+    throw new Error('Failed to upload reference photo: ' + error.message);
+  }
+}
+
+// ========== REPORT SUBMISSION ==========
+
+async function submitLostReport(event) {
+  event.preventDefault();
+
+  try {
+    const student_name = studentNameInput?.value.trim();
+    const contact_number = contactNumberInput?.value.trim();
+    const student_email = studentEmailInput?.value.trim();
+    const item_description = reportItemDescriptionTextarea?.value.trim();
+    const date_missing = reportDateMissingInput?.value || '';
+    const time_missing = reportTimeMissingInput?.value || '';
+    const last_location = reportLastLocationInput?.value.trim() || '';
+    const refPhotoFile1 = refPhotoFile1Input?.files?.[0] || null;
+    const refPhotoFile2 = refPhotoFile2Input?.files?.[0] || null;
+    const matched_item_id = matchedItemIdInput?.value || null;
+    const match_score = Number(matchScoreInput?.value) || 0;
+
+    // Validation
+    if (!student_name || !student_email || !item_description) {
+      setStatusMessage(
+        reportFormMessage,
+        'Please complete your name, email, and item description.',
+        'error'
+      );
+      return;
+    }
+
+    // Disable submit button
+    if (submitReportBtn) {
+      submitReportBtn.disabled = true;
+      submitReportBtn.textContent = 'Submitting...';
+    }
+
+    setStatusMessage(reportFormMessage, 'Submitting your report...', 'info');
+
+    // Upload photos if provided
+    let ref_photo_url_1 = '';
+    let ref_photo_url_2 = '';
+
+    if (refPhotoFile1) {
+      ref_photo_url_1 = await uploadReferencePhoto(refPhotoFile1);
+    }
+    if (refPhotoFile2) {
+      ref_photo_url_2 = await uploadReferencePhoto(refPhotoFile2);
+    }
+
+    // Submit report
+    const response = await fetch(`${API_URL}/lost-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_name,
+        contact_number,
+        student_email,
+        item_description,
+        date_missing,
+        time_missing,
+        last_location,
+        ref_photo_url_1,
+        ref_photo_url_2,
+        matched_item_id,
+        match_score,
+      }),
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to submit the report.');
+    }
+
+    // Success - reset form and show success panel
+    if (reportForm) reportForm.reset();
+    if (reportSection) reportSection.hidden = true;
+    if (reportSuccessPanel) reportSuccessPanel.hidden = false;
+    
+    setStatusMessage(
+      reportFormMessage,
+      'Report submitted successfully. We will notify you once the item is turned in.',
+      'success'
+    );
+
+  } catch (error) {
+    console.error('Report submission error:', error);
+    setStatusMessage(
+      reportFormMessage,
+      error.message || 'Unable to submit report.',
+      'error'
+    );
+  } finally {
+    if (submitReportBtn) {
+      submitReportBtn.disabled = false;
+      submitReportBtn.textContent = 'Submit Report';
+    }
+  }
+}
+
+// ========== SIDEBAR NAVIGATION ==========
+
+function openSidebar() {
+  const container = document.querySelector('.dashboard-container');
+  if (container) {
+    container.classList.add('sidebar-open');
+  }
+}
+
+function closeSidebar() {
+  const container = document.querySelector('.dashboard-container');
+  if (container) {
+    container.classList.remove('sidebar-open');
+  }
+}
+
+function toggleSidebar() {
+  const container = document.querySelector('.dashboard-container');
+  if (container) {
+    container.classList.toggle('sidebar-open');
+  }
+}
+
+// ========== NAVIGATION INITIALIZATION ==========
+
+function initNavigation() {
+  try {
+    // Initialize menu items
+    document.querySelectorAll('.menu-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const section = item.dataset.section;
+        if (section) {
+          switchSection(section);
+          closeSidebar();
+        }
+      });
+    });
+
+    // Initialize sidebar toggle
+    if (sidebarToggle) {
+      sidebarToggle.addEventListener('click', toggleSidebar);
+    }
+
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener('click', closeSidebar);
+    }
+
+    // Close sidebar on Escape key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeSidebar();
+      }
+    });
+
+    console.log('Navigation initialized successfully');
+  } catch (error) {
+    console.error('Error initializing navigation:', error);
+  }
+}
+
+// ========== SECTION SWITCHING ==========
+
+function switchSection(sectionName) {
+  try {
+    // Update active menu item
+    document.querySelectorAll('.menu-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    const activeMenuItem = document.querySelector(`[data-section="${sectionName}"]`);
+    if (activeMenuItem) {
+      activeMenuItem.classList.add('active');
+    }
+
+    // Update active content section
+    document.querySelectorAll('.content-section').forEach(section => {
+      section.classList.remove('active');
+    });
+    const activeSection = document.getElementById(`${sectionName}-section`);
+    if (activeSection) {
+      activeSection.classList.add('active');
+    }
+
+    currentSection = sectionName;
+    console.log('Switched to section:', sectionName);
+  } catch (error) {
+    console.error('Error switching section:', error);
+  }
+}
+
+// ========== LOGOUT HANDLER ==========
+
+function handleLogout() {
+  try {
+    console.log('Logout button clicked');
+    
+    // Call the logout function from auth.js
+    if (typeof logout === 'function') {
+      logout();
+    } else if (typeof window.logout === 'function') {
+      window.logout();
     } else {
-        console.warn('⚠️ Logout button not found in DOM');
+      console.error('Logout function not available');
+      // Fallback: redirect to login
+      window.location.href = '/login.html';
     }
+  } catch (error) {
+    console.error('Error during logout:', error);
+    // Fallback: redirect to login
+    window.location.href = '/login.html';
+  }
 }
 
-// ==================== INITIALIZATION ====================
+// ========== PAGE INITIALIZATION ==========
+
+function initPage() {
+  try {
+    // Search button
+    if (searchBtn) {
+      searchBtn.addEventListener('click', searchBlindMatch);
+    } else {
+      console.warn('searchBtn element not found');
+    }
+
+    // Report form submission
+    if (reportForm) {
+      reportForm.addEventListener('submit', submitLostReport);
+    } else {
+      console.warn('reportForm element not found');
+    }
+
+    // Cancel report button
+    if (cancelReportBtn) {
+      cancelReportBtn.addEventListener('click', hideReportForm);
+    } else {
+      console.warn('cancelReportBtn element not found');
+    }
+
+    // LOGOUT BUTTON - Critical fix!
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', handleLogout);
+      console.log('Logout button listener attached successfully');
+    } else {
+      console.warn('logoutBtn element not found');
+    }
+
+    console.log('Page initialization completed');
+  } catch (error) {
+    console.error('Error during page initialization:', error);
+  }
+}
+
+// ========== DOM CONTENT LOADED ==========
+
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🔄 Admin Dashboard initializing...');
-    
-    setupMobileMenu();
-    await checkAuthAndRedirect();
-    await loadStorageConfig();
+  console.log('=== DOMContentLoaded triggered ===');
+
+  try {
+    // Initialize all DOM element references
+    itemDescriptionTextarea = document.getElementById('itemDescription');
+    dateMissingInput = document.getElementById('dateMissing');
+    timeMissingInput = document.getElementById('timeMissing');
+    lastLocationInput = document.getElementById('lastLocation');
+    searchBtn = document.getElementById('searchBtn');
+    searchStatus = document.getElementById('searchStatus');
+    searchResultContainer = document.getElementById('searchResultContainer');
+    reportSection = document.getElementById('reportSection');
+    reportForm = document.getElementById('reportForm');
+    studentNameInput = document.getElementById('studentName');
+    contactNumberInput = document.getElementById('contactNumber');
+    studentEmailInput = document.getElementById('studentEmail');
+    reportItemDescriptionTextarea = document.getElementById('reportItemDescription');
+    reportDateMissingInput = document.getElementById('reportDateMissing');
+    reportTimeMissingInput = document.getElementById('reportTimeMissing');
+    reportLastLocationInput = document.getElementById('reportLastLocation');
+    refPhotoFile1Input = document.getElementById('refPhotoFile1');
+    refPhotoFile2Input = document.getElementById('refPhotoFile2');
+    matchedItemIdInput = document.getElementById('matchedItemId');
+    matchScoreInput = document.getElementById('matchScore');
+    submitReportBtn = document.getElementById('submitReportBtn');
+    cancelReportBtn = document.getElementById('cancelReportBtn');
+    reportFormMessage = document.getElementById('reportFormMessage');
+    reportSuccessPanel = document.getElementById('reportSuccessPanel');
+    sidebarToggle = document.getElementById('sidebarToggle');
+    sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    logoutBtn = document.getElementById('logoutBtn');  // Critical: Get logout button
+
+    console.log('DOM elements initialized. Logout button status:', !!logoutBtn);
+
+    // Initialize authentication and navigation
+    if (typeof checkAuthAndRedirect === 'function') {
+      await checkAuthAndRedirect();
+    } else {
+      console.warn('checkAuthAndRedirect function not available from auth.js');
+    }
+
+    // Load user profile
     await loadUserProfile();
-    setupDashboardEventListeners();
-    
-    console.log('📂 Loading dashboard data...');
-    await fetchItems();
-    await fetchLostReports();
-    
-    console.log('✅ Admin Dashboard ready');
+
+    // Initialize navigation
+    initNavigation();
+
+    // Initialize page listeners
+    initPage();
+
+    console.log('=== Initialization complete ===');
+
+  } catch (error) {
+    console.error('Fatal error during DOMContentLoaded:', error);
+  }
 });
