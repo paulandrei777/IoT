@@ -1,3 +1,11 @@
+// ========== SUPABASE CONFIGURATION ==========
+// Siguraduhin na ang auth.js ay na-load bago ito
+const supabase = window.supabaseClient; 
+
+if (!supabase) {
+    console.error("Supabase client not found! Make sure auth.js is loaded correctly.");
+}
+
 // ========== ADMIN DASHBOARD INITIALIZATION ==========
 // DOM Elements
 let logoutBtn;
