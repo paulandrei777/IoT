@@ -1,194 +1,258 @@
 const API_URL = "https://iot-production-17b1.up.railway.app/api/items";
 
-let allItems = [];
-let activeItems = [];
-let claimedItems = [];
-let DEFAULT_IMAGE_URL = null; // Will be fetched from server
+const itemDescriptionTextarea = document.getElementById('itemDescription');
+const dateMissingInput = document.getElementById('dateMissing');
+const timeMissingInput = document.getElementById('timeMissing');
+const lastLocationInput = document.getElementById('lastLocation');
+const searchBtn = document.getElementById('searchBtn');
+const searchStatus = document.getElementById('searchStatus');
+const searchResultContainer = document.getElementById('searchResultContainer');
 
-// Modal state
-const claimModal = document.getElementById('claimModal');
-const claimModalItemName = document.getElementById('claimModalItemName');
+const reportSection = document.getElementById('reportSection');
+const reportForm = document.getElementById('reportForm');
+const studentNameInput = document.getElementById('studentName');
+const contactNumberInput = document.getElementById('contactNumber');
 const studentEmailInput = document.getElementById('studentEmail');
-const pickupNotesTextarea = document.getElementById('pickupNotes');
-const claimModalMessage = document.getElementById('claimModalMessage');
-const requestClaimBtn = document.getElementById('requestClaimBtn');
-let activeItemId = null;
+const reportItemDescriptionTextarea = document.getElementById('reportItemDescription');
+const reportDateMissingInput = document.getElementById('reportDateMissing');
+const reportTimeMissingInput = document.getElementById('reportTimeMissing');
+const reportLastLocationInput = document.getElementById('reportLastLocation');
+const refPhotoFile1Input = document.getElementById('refPhotoFile1');
+const refPhotoFile2Input = document.getElementById('refPhotoFile2');
+const matchedItemIdInput = document.getElementById('matchedItemId');
+const matchScoreInput = document.getElementById('matchScore');
+const submitReportBtn = document.getElementById('submitReportBtn');
+const cancelReportBtn = document.getElementById('cancelReportBtn');
+const reportFormMessage = document.getElementById('reportFormMessage');
+const reportSuccessPanel = document.getElementById('reportSuccessPanel');
 
-// Image Modal state
-const imageModal = document.getElementById('imageModal');
-const imageModalImg = document.getElementById('imageModalImg');
-
-// Sidebar toggle state
 const sidebarToggle = document.getElementById('sidebarToggle');
 const sidebarBackdrop = document.getElementById('sidebarBackdrop');
-
-// Navigation state
 let currentSection = 'dashboard';
 
-// Fetch storage config from server
-async function loadStorageConfig() {
-  try {
-    const response = await fetch('/api/config/storage');
-    const data = await response.json();
-    DEFAULT_IMAGE_URL = data.defaultImageUrl;
-    console.log('✓ [CLIENT] Default image URL loaded:', DEFAULT_IMAGE_URL);
-  } catch (error) {
-    console.error('❌ [CLIENT] Failed to load storage config:', error);
-    // Fallback - this should not happen in production
-    DEFAULT_IMAGE_URL = `${window.SUPABASE_URL}/storage/v1/object/public/items/default.png`;
-  }
-}
+const matchState = {
+  matched_item_id: null,
+  match_score: 0,
+  item_description: '',
+  date_missing: '',
+  time_missing: '',
+  last_location: '',
+};
 
-// Fetch all items and categorize them
-async function fetchItems() {
-  try {
-    const res = await fetch(API_URL);
-    allItems = await res.json();
-
-    // Categorize items
-    activeItems = allItems.filter(item => item.status === 'approved');
-    claimedItems = allItems.filter(item => item.status === 'claimed');
-
-    renderActiveItems();
-    renderClaimedItems();
-  } catch (error) {
-    console.error('Error fetching items:', error);
-  }
-}
-
-// Load user profile
 async function loadUserProfile() {
-    try {
-        console.log('Loading user profile...');
-        const { data } = await supabaseClient.auth.getSession();
-        console.log('Session data:', data);
-        const session = data?.session;
-        if (!session?.user?.id) {
-            console.log('No session or user ID found');
-            // Should not happen since checkAuthAndRedirect handles this
-            return;
-        }
-        console.log('User ID:', session.user.id);
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    const session = data?.session;
+    if (!session?.user?.id) return;
 
-        const profile = await getProfile(session.user.id);
-        console.log('Profile data:', profile);
+    const profile = await getProfile(session.user.id);
+    const userNameEl = document.getElementById('userName');
+    if (userNameEl) userNameEl.textContent = profile.full_name || 'Student';
 
-        // Display user info if elements exist
-        const userNameEl = document.getElementById('userName');
-        if (userNameEl) {
-            userNameEl.textContent = profile.full_name || 'Unknown';
-            console.log('Updated userName:', profile.full_name);
-        }
-
-        const userEmailEl = document.getElementById('userEmail');
-        if (userEmailEl) {
-            userEmailEl.textContent = profile.email || 'No email';
-            console.log('Updated userEmail:', profile.email);
-        }
-
-        // Update settings profile info
-        const settingsFullNameEl = document.getElementById('settingsFullName');
-        if (settingsFullNameEl) {
-            settingsFullNameEl.textContent = profile.full_name || 'Unknown';
-            console.log('Updated settingsFullName:', profile.full_name);
-        }
-
-        const settingsEmailEl = document.getElementById('settingsEmail');
-        if (settingsEmailEl) {
-            settingsEmailEl.textContent = profile.email || 'No email';
-            console.log('Updated settingsEmail:', profile.email);
-        }
-
-        const settingsRoleEl = document.getElementById('settingsRole');
-        if (settingsRoleEl) {
-            settingsRoleEl.textContent = profile.role || 'No role';
-            console.log('Updated settingsRole:', profile.role);
-        }
-
-        // Attach logout handler
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', logout);
-        }
-    } catch (error) {
-        console.error('Error loading profile:', error);
-        // Don't redirect on error, just log it
-    }
+    if (studentNameInput) studentNameInput.value = profile.full_name || '';
+    if (studentEmailInput) studentEmailInput.value = profile.email || '';
+  } catch (error) {
+    console.error('Error loading profile:', error);
+  }
 }
 
-// Render active items
-function renderActiveItems(searchQuery = '') {
-  const container = document.getElementById('activeItemsContainer');
-  const filteredItems = activeItems.filter(item =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  renderItems(container, filteredItems, 'active');
+function setStatusMessage(element, message, type = 'info') {
+  if (!element) return;
+  element.textContent = message;
+  element.className = 'status-message';
+  if (message) element.classList.add(`status-message--${type}`);
 }
 
-// Render claimed items
-function renderClaimedItems(searchQuery = '') {
-  const container = document.getElementById('claimedItemsContainer');
-  const filteredItems = claimedItems.filter(item =>
-    item.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  renderItems(container, filteredItems, 'claimed');
+function renderSearchResult({ matched_item_id, match_score }) {
+  searchResultContainer.innerHTML = '';
+  const normalizedScore = Number(match_score) || 0;
+
+  if (normalizedScore >= 70) {
+    searchResultContainer.innerHTML = `
+      <div class="search-card">
+        <p>We found an item in our office that closely matches your description (Match Score: ${normalizedScore}%).</p>
+        <button class="btn btn-primary" id="verifyReportBtn">Verify & File Report</button>
+      </div>
+    `;
+
+    document.getElementById('verifyReportBtn')?.addEventListener('click', showReportForm);
+  } else {
+    searchResultContainer.innerHTML = `
+      <div class="search-card">
+        <p>No immediate match found, but you can still file a formal report so we can notify you once it's turned in.</p>
+        <button class="btn btn-secondary" id="fileReportBtn">File a Formal Report</button>
+      </div>
+    `;
+
+    document.getElementById('fileReportBtn')?.addEventListener('click', showReportForm);
+  }
 }
 
-// Generic render function
-function renderItems(container, items, type = 'active') {
-  container.innerHTML = '';
-  if (items.length === 0) {
-    const message = type === 'active' ? 'No active items available' : 'No claimed items found';
-    container.innerHTML = `<p style="text-align: center; padding: 40px; color: var(--gray-600); font-style: italic;">${message}</p>`;
+async function searchBlindMatch() {
+  const item_description = itemDescriptionTextarea?.value.trim();
+  const date_missing = dateMissingInput?.value || '';
+  const time_missing = timeMissingInput?.value || '';
+  const last_location = lastLocationInput?.value.trim() || '';
+
+  if (!item_description) {
+    setStatusMessage(searchStatus, 'Please describe the lost item before searching.', 'error');
+    itemDescriptionTextarea.focus();
     return;
   }
-  items.forEach(item => {
-    const div = document.createElement('div');
-    div.className = 'item-card';
-    const date = new Date(item.created_at).toLocaleDateString();
-    const isClaimed = item.status === 'claimed';
-    const statusText = isClaimed ? 'Claimed' : 'Available';
-    const statusClass = `status-${item.status}`;
-    const buttonText = isClaimed ? 'Claimed' : 'Claim Item';
-    const buttonDisabled = isClaimed ? 'disabled' : '';
-    // If item.display_name exists, display it; else fallback to item.name (filename)
-    const displayName = item.display_name ? item.display_name : item.name;
-    // Add ai_description display if available
-    const description = item.ai_description ? `<p>${item.ai_description}</p>` : '';
 
-    div.innerHTML = `
-      <div class="item-card-head">
-        <span class="item-status-badge ${item.status}">${statusText}</span>
-      </div>
-      <img src="${item.image_url}" alt="${displayName}" onclick="openImageModal('${item.image_url}', '${displayName}')" onerror="this.src='${DEFAULT_IMAGE_URL}'">
-      <h3>${displayName}</h3>
-      ${description}
-      <p>Date Detected: ${date}</p>
-      <span class="status ${statusClass}">${statusText}</span>
-      <button class="claim-btn" ${buttonDisabled} onclick="openClaimModal('${item.id}')">${buttonText}</button>
-    `;
-    container.appendChild(div);
-  });
+  searchBtn.disabled = true;
+  setStatusMessage(searchStatus, 'Searching for the best blind match...', 'info');
+
+  try {
+    const response = await fetch(`${API_URL}/blind-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_description, date_missing, time_missing, last_location }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || 'Blind match search failed');
+    }
+
+    matchState.matched_item_id = result.matched_item_id || null;
+    matchState.match_score = Number(result.match_score) || 0;
+    matchState.item_description = item_description;
+    matchState.date_missing = date_missing;
+    matchState.time_missing = time_missing;
+    matchState.last_location = last_location;
+
+    matchedItemIdInput.value = matchState.matched_item_id || '';
+    matchScoreInput.value = matchState.match_score;
+    reportItemDescriptionTextarea.value = item_description;
+    reportDateMissingInput.value = date_missing;
+    reportTimeMissingInput.value = time_missing;
+    reportLastLocationInput.value = last_location;
+
+    renderSearchResult(result);
+    setStatusMessage(searchStatus, 'Search completed.', 'success');
+  } catch (error) {
+    console.error('Blind search error:', error);
+    renderSearchResult({ matched_item_id: null, match_score: 0 });
+    setStatusMessage(searchStatus, error.message || 'Unable to perform blind match search.', 'error');
+  } finally {
+    searchBtn.disabled = false;
+  }
 }
 
-// Navigation functions
-function switchSection(sectionName) {
-  // Update navigation
-  document.querySelectorAll('.menu-item').forEach(item => {
-    item.classList.remove('active');
-  });
-  document.querySelector(`[data-section="${sectionName}"]`).classList.add('active');
-
-  // Update content sections
-  document.querySelectorAll('.content-section').forEach(section => {
-    section.classList.remove('active');
-  });
-  document.getElementById(`${sectionName}-section`).classList.add('active');
-
-  currentSection = sectionName;
+function showReportForm() {
+  if (!reportSection) return;
+  reportSection.hidden = false;
+  if (reportSuccessPanel) {
+    reportSuccessPanel.hidden = true;
+  }
+  setStatusMessage(reportFormMessage, 'Complete the report form and submit it. Your match score has been preserved.', 'info');
+  reportItemDescriptionTextarea.value = matchState.item_description;
+  reportDateMissingInput.value = matchState.date_missing;
+  reportTimeMissingInput.value = matchState.time_missing;
+  reportLastLocationInput.value = matchState.last_location;
+  matchedItemIdInput.value = matchState.matched_item_id || '';
+  matchScoreInput.value = matchState.match_score;
+  reportFormMessage.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Initialize navigation
+function hideReportForm() {
+  if (!reportSection) return;
+  reportSection.hidden = true;
+  if (reportSuccessPanel) reportSuccessPanel.hidden = true;
+  setStatusMessage(reportFormMessage, '', 'info');
+}
+
+async function uploadReferencePhoto(file) {
+  if (!file) return '';
+
+  const fileExt = file.name.split('.').pop() || 'jpg';
+  const fileName = `reference_${Date.now()}_${Math.random().toString(36).slice(2)}.${fileExt}`;
+
+  const { data, error } = await supabaseClient.storage
+    .from('reference_photos')
+    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return `${window.SUPABASE_URL}/storage/v1/object/public/reference_photos/${encodeURIComponent(fileName)}`;
+}
+
+async function submitLostReport(event) {
+  event.preventDefault();
+
+  const student_name = studentNameInput?.value.trim();
+  const contact_number = contactNumberInput?.value.trim();
+  const student_email = studentEmailInput?.value.trim();
+  const item_description = reportItemDescriptionTextarea?.value.trim();
+  const date_missing = reportDateMissingInput?.value || '';
+  const time_missing = reportTimeMissingInput?.value || '';
+  const last_location = reportLastLocationInput?.value.trim() || '';
+  const refPhotoFile1 = refPhotoFile1Input?.files?.[0] || null;
+  const refPhotoFile2 = refPhotoFile2Input?.files?.[0] || null;
+  const matched_item_id = matchedItemIdInput?.value || null;
+  const match_score = Number(matchScoreInput?.value) || 0;
+
+  if (!student_name || !student_email || !item_description) {
+    setStatusMessage(reportFormMessage, 'Please complete your name, email, and item description.', 'error');
+    return;
+  }
+
+  submitReportBtn.disabled = true;
+  submitReportBtn.textContent = 'Submitting...';
+  setStatusMessage(reportFormMessage, 'Submitting your report...', 'info');
+
+  try {
+    let ref_photo_url_1 = '';
+    let ref_photo_url_2 = '';
+
+    if (refPhotoFile1) {
+      ref_photo_url_1 = await uploadReferencePhoto(refPhotoFile1);
+    }
+    if (refPhotoFile2) {
+      ref_photo_url_2 = await uploadReferencePhoto(refPhotoFile2);
+    }
+
+    const response = await fetch(`${API_URL}/lost-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        student_name,
+        contact_number,
+        student_email,
+        item_description,
+        date_missing,
+        time_missing,
+        last_location,
+        ref_photo_url_1,
+        ref_photo_url_2,
+        matched_item_id,
+        match_score,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to submit the report.');
+    }
+
+    reportForm.reset();
+    reportSection.hidden = true;
+    if (reportSuccessPanel) {
+      reportSuccessPanel.hidden = false;
+    }
+    setStatusMessage(reportFormMessage, 'Report submitted successfully. We will notify you once the item is turned in.', 'success');
+  } catch (error) {
+    console.error('Report submission error:', error);
+    setStatusMessage(reportFormMessage, error.message || 'Unable to submit report.', 'error');
+  } finally {
+    submitReportBtn.disabled = false;
+    submitReportBtn.textContent = 'Submit Report';
+  }
+}
+
 function openSidebar() {
   document.querySelector('.dashboard-container').classList.add('sidebar-open');
 }
@@ -210,148 +274,29 @@ function initNavigation() {
     });
   });
 
-  if (sidebarToggle) {
-    sidebarToggle.addEventListener('click', toggleSidebar);
-  }
-
-  if (sidebarBackdrop) {
-    sidebarBackdrop.addEventListener('click', closeSidebar);
-  }
+  if (sidebarToggle) sidebarToggle.addEventListener('click', toggleSidebar);
+  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', closeSidebar);
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      closeSidebar();
-    }
+    if (e.key === 'Escape') closeSidebar();
   });
 }
 
-// Open claim request modal
-function openClaimModal(id) {
-  const item = allItems.find(i => i.id === id);
-  if (!item) return;
-
-  activeItemId = id;
-  claimModalItemName.textContent = item.name;
-  studentEmailInput.value = localStorage.getItem('studentEmail') || '';
-  pickupNotesTextarea.value = '';
-  setModalMessage('');
-
-  claimModal.classList.add('open');
-  claimModal.setAttribute('aria-hidden', 'false');
-
-  // Focus the email input when modal opens
-  setTimeout(() => studentEmailInput.focus(), 0);
+function switchSection(sectionName) {
+  document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
+  document.querySelector(`[data-section="${sectionName}"]`)?.classList.add('active');
+  document.querySelectorAll('.content-section').forEach(section => section.classList.remove('active'));
+  document.getElementById(`${sectionName}-section`)?.classList.add('active');
+  currentSection = sectionName;
 }
 
-function closeClaimModal() {
-  activeItemId = null;
-  claimModal.classList.remove('open');
-  claimModal.setAttribute('aria-hidden', 'true');
-  setModalMessage('');
+function initPage() {
+  if (searchBtn) searchBtn.addEventListener('click', searchBlindMatch);
+  if (reportForm) reportForm.addEventListener('submit', submitLostReport);
+  if (cancelReportBtn) cancelReportBtn.addEventListener('click', hideReportForm);
 }
 
-function setModalMessage(message, type = 'info') {
-  claimModalMessage.textContent = message;
-  claimModalMessage.className = 'modal-message';
-  if (message) claimModalMessage.classList.add(`modal-message--${type}`);
-}
-
-async function requestClaim() {
-  if (!activeItemId) return;
-
-  const studentEmail = studentEmailInput.value.trim();
-  const pickupNotes = pickupNotesTextarea.value.trim();
-
-  // Validate required email
-  if (!studentEmail) {
-    setModalMessage('Please enter your email to request claiming the item.', 'error');
-    studentEmailInput.focus();
-    return;
-  }
-
-  requestClaimBtn.disabled = true;
-  requestClaimBtn.textContent = 'Submitting...';
-  setModalMessage('', 'info');
-
-  try {
-    const res = await fetch(`${API_URL}/${activeItemId}/claim-request`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ studentEmail, pickupNotes }),
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(errorText || 'Failed to submit claim request');
-    }
-
-    // Store email for future use
-    localStorage.setItem('studentEmail', studentEmail);
-
-    // Show success message
-    setModalMessage('Claim request submitted. Admin will review it.', 'success');
-
-    // Close modal after 1-2 seconds
-    setTimeout(() => {
-      closeClaimModal();
-    }, 1500);
-  } catch (error) {
-    console.error('Error submitting claim request:', error);
-    setModalMessage('Unable to submit claim request. Please try again.', 'error');
-  } finally {
-    requestClaimBtn.disabled = false;
-    requestClaimBtn.textContent = 'Request Claim';
-  }
-}
-
-// Image Modal Functions
-function openImageModal(imageUrl, altText) {
-  imageModalImg.src = imageUrl;
-  imageModalImg.alt = altText;
-  imageModalImg.classList.remove('zoomed');
-  imageModal.classList.add('open');
-  imageModal.setAttribute('aria-hidden', 'false');
-}
-
-function closeImageModal() {
-  imageModal.classList.remove('open');
-  imageModal.setAttribute('aria-hidden', 'true');
-}
-
-function toggleZoom() {
-  imageModalImg.classList.toggle('zoomed');
-}
-
-// Search functionality for active items
-document.getElementById('searchBar').addEventListener('input', function() {
-  const query = this.value;
-  renderActiveItems(query);
-});
-
-// Search functionality for claimed items
-document.getElementById('claimedSearchBar').addEventListener('input', function() {
-  const query = this.value;
-  renderClaimedItems(query);
-});
-
-// Modal close & confirm
-[...document.querySelectorAll('[data-close-modal]')].forEach(el => el.addEventListener('click', closeClaimModal));
-claimModal.addEventListener('keydown', e => { if (e.key === 'Escape') closeClaimModal(); });
-requestClaimBtn.addEventListener('click', requestClaim);
-
-// Refresh button
-document.getElementById('refreshBtn').addEventListener('click', fetchItems);
-
-// Image Modal Events
-[...document.querySelectorAll('[data-close-image-modal]')].forEach(el => el.addEventListener('click', closeImageModal));
-imageModal.addEventListener('keydown', e => { if (e.key === 'Escape') closeImageModal(); });
-imageModalImg.addEventListener('click', toggleZoom);
-
-// Initialize app
 initNavigation();
 checkAuthAndRedirect();
 loadUserProfile();
-loadStorageConfig(); // Load default image URL from server
-fetchItems();
+initPage();

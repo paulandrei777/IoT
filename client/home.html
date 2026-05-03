@@ -22,10 +22,6 @@
           <span class="menu-icon"><img src="/assets/images/lost-and-found.png" alt="Lost Items"></span>
           Lost Items
         </li>
-        <li class="menu-item" data-section="claimed">
-          <span class="menu-icon"><img src="/assets/images/double-check.png" alt="Claimed Items"></span>
-          Claimed Items
-        </li>
         <li class="menu-item" data-section="settings">
           <span class="menu-icon"><img src="/assets/images/settings.png" alt="Settings"></span>
           Settings
@@ -57,36 +53,95 @@
         </header>
 
         <div class="controls-section">
-          <div class="search-group">
-            <input type="text" id="searchBar" placeholder="Search items by name...">
-            <button class="btn btn-primary" id="refreshBtn">Refresh</button>
+          <div class="search-panel">
+            <label class="form-label" for="itemDescription">Describe the lost item</label>
+            <textarea id="itemDescription" rows="5" class="form-textarea" placeholder="Provide a detailed description of the item, including color, size, brand, marks, and any other identifying details."></textarea>
+
+            <div class="form-row">
+              <div class="form-field">
+                <label class="form-label" for="dateMissing">Date Missing</label>
+                <input type="date" id="dateMissing" class="form-input">
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="timeMissing">Time Missing</label>
+                <input type="time" id="timeMissing" class="form-input">
+              </div>
+              <div class="form-field full-width">
+                <label class="form-label" for="lastLocation">Last Known Location</label>
+                <input type="text" id="lastLocation" class="form-input" placeholder="e.g. library, cafeteria, lab">
+              </div>
+            </div>
+
+            <div class="search-actions">
+              <button class="btn btn-primary" id="searchBtn">Search</button>
+            </div>
+            <div id="searchStatus" class="status-message" aria-live="polite"></div>
           </div>
         </div>
 
         <section class="items-section">
-          <h2>Active Items</h2>
-          <p class="section-description">Items currently available for claiming</p>
-          <div id="activeItemsContainer" class="items-grid"></div>
+          <h2>Blind Match Result</h2>
+          <p class="section-description">Our AI will compare your description against stored item descriptions without revealing any images.</p>
+          <div id="searchResultContainer" class="search-result-panel"></div>
         </section>
-      </section>
 
-      <!-- Claimed Items Section -->
-      <section id="claimed-section" class="content-section">
-        <header class="section-header">
-          <h1>Claimed Items History</h1>
-          <p class="section-description">Items that have successfully claimed</p>
-        </header>
-
-        <div class="controls-section">
-          <div class="search-group">
-            <input type="text" id="claimedSearchBar" placeholder="Search claimed items...">
+        <section id="reportSection" class="items-section" hidden>
+          <h2>File a Formal Report</h2>
+          <p class="section-description">Complete the form below so we can notify you if your item is turned in.</p>
+          <form id="reportForm" class="report-form">
+            <div class="form-group">
+              <label class="form-label" for="studentName">Your Full Name</label>
+              <input type="text" id="studentName" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="contactNumber">Contact Number</label>
+              <input type="tel" id="contactNumber" class="form-input" placeholder="(555) 123-4567">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="studentEmail">Email Address</label>
+              <input type="email" id="studentEmail" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="reportItemDescription">Item Description</label>
+              <textarea id="reportItemDescription" rows="5" class="form-textarea" required></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-field">
+                <label class="form-label" for="reportDateMissing">Date Missing</label>
+                <input type="date" id="reportDateMissing" class="form-input">
+              </div>
+              <div class="form-field">
+                <label class="form-label" for="reportTimeMissing">Time Missing</label>
+                <input type="time" id="reportTimeMissing" class="form-input">
+              </div>
+              <div class="form-field full-width">
+                <label class="form-label" for="reportLastLocation">Last Known Location</label>
+                <input type="text" id="reportLastLocation" class="form-input" placeholder="e.g. dorm lobby, auditorium">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="refPhotoFile1">Reference Photo 1</label>
+              <input type="file" id="refPhotoFile1" class="form-input" accept="image/*">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="refPhotoFile2">Reference Photo 2</label>
+              <input type="file" id="refPhotoFile2" class="form-input" accept="image/*">
+            </div>
+            <input type="hidden" id="matchedItemId">
+            <input type="hidden" id="matchScore">
+            <div class="form-actions">
+              <button type="submit" class="btn btn-success" id="submitReportBtn">Submit Report</button>
+              <button type="button" class="btn btn-secondary" id="cancelReportBtn">Back to Search</button>
+            </div>
+            <div id="reportFormMessage" class="status-message" aria-live="polite"></div>
+          </form>
+          <div id="reportSuccessPanel" class="success-panel" hidden>
+            <h3>Report Submitted</h3>
+            <p>Your report is now pending admin verification. Please wait while we verify the match.</p>
           </div>
-        </div>
-
-        <section class="items-section">
-          <div id="claimedItemsContainer" class="items-grid"></div>
         </section>
       </section>
+
 
       <!-- Settings Section -->
       <section id="settings-section" class="content-section">
@@ -124,49 +179,6 @@
         </div>
       </section>
     </main>
-  </div>
-
-  <!-- Claim Request Modal -->
-  <div id="claimModal" class="modal" aria-hidden="true">
-    <div class="modal-overlay" data-close-modal></div>
-    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="claimModalTitle">
-      <header class="modal-header">
-        <h2 id="claimModalTitle">Request to Claim Item</h2>
-        <button type="button" class="modal-close" data-close-modal aria-label="Close">&times;</button>
-      </header>
-      <div class="modal-body">
-        <p id="claimModalItemName" class="modal-item-name"></p>
-
-        <label class="modal-label" for="studentEmail">Your Email <span class="required">*</span></label>
-        <input type="email" id="studentEmail" class="modal-input" placeholder="you@example.com" required />
-
-        <label class="modal-label" for="pickupNotes">Pickup Notes or Message to Admin <span
-            class="optional">(optional)</span></label>
-        <textarea id="pickupNotes" class="modal-textarea"
-          placeholder="Any additional information about pickup..."></textarea>
-
-        <div class="contact-info">
-          <h4>Contact Information</h4>
-          <p><strong>Admin:</strong> admin@school.edu</p>
-          <p><strong>Lost & Found:</strong> (555) 123-4567</p>
-        </div>
-
-        <div id="claimModalMessage" class="modal-message" aria-live="polite"></div>
-      </div>
-      <footer class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
-        <button type="button" class="btn btn-primary" id="requestClaimBtn">Request Claim</button>
-      </footer>
-    </div>
-  </div>
-
-  <!-- Image Preview Modal -->
-  <div id="imageModal" class="image-modal" aria-hidden="true">
-    <div class="image-modal-overlay" data-close-image-modal></div>
-    <div class="image-modal-content">
-      <button type="button" class="image-modal-close" data-close-image-modal aria-label="Close">&times;</button>
-      <img id="imageModalImg" src="" alt="Item Image" class="image-modal-img">
-    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>

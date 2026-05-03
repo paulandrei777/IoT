@@ -79,6 +79,211 @@ const extractAiText = (response) => {
   return textPieces.join(' ').trim();
 };
 
+const extractJsonFromText = (text) => {
+  if (!text || typeof text !== 'string') return null;
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+};
+
+const simpleSimilarityScore = (a, b) => {
+  const normalize = (value) => (value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const tokensA = new Set(normalize(a));
+  const tokensB = new Set(normalize(b));
+  if (!tokensA.size || !tokensB.size) return 0;
+
+  const intersection = [...tokensA].filter(token => tokensB.has(token)).length;
+  return intersection / Math.max(tokensA.size, tokensB.size);
+};
+
+const calculateMatchScoresWithGemini = async (studentDescription, items) => {
+  const candidates = items.slice(0, 20).map(item => ({
+    id: item.id,
+    ai_description: item.ai_description || '',
+    display_name: item.display_name || '',
+  }));
+
+  const prompt = `You are a secure lost-and-found match assistant. Compare the student's item description against each stored item description below. Return only valid JSON with a root object containing a 'matches' array. Each item in the array must use the fields: id, match_score. The match_score must be an integer from 0 to 100. Do not include any additional text or explanation.\n\nstudent_description:\n${studentDescription.trim()}\n\nitems:\n${JSON.stringify(candidates, null, 2)}`;
+
+  const requestPayload = {
+    contents: [{
+      role: 'user',
+      parts: [{ text: prompt }],
+    }],
+    generationConfig: {
+      temperature: 0.0,
+      maxOutputTokens: 1000,
+      responseMimeType: 'application/json',
+    },
+  };
+
+  try {
+    const { response } = await generateWithModelFallback(requestPayload);
+    const responseText = extractAiText(response);
+    const parsed = extractJsonFromText(responseText);
+
+    if (parsed && Array.isArray(parsed.matches)) {
+      return parsed.matches.map(match => ({
+        id: match.id,
+        match_score: Number(match.match_score) || 0,
+      }));
+    }
+  } catch (err) {
+    console.warn('[calculateMatchScoresWithGemini] AI similarity fallback:', err.message || err);
+  }
+
+  return candidates.map(item => ({
+    id: item.id,
+    match_score: Math.round(simpleSimilarityScore(studentDescription, item.ai_description) * 100),
+  }));
+};
+
+const blindSearchMatch = async (req, res) => {
+  const { item_description } = req.body || {};
+  if (!item_description || !item_description.trim()) {
+    return res.status(400).json({ error: 'item_description is required' });
+  }
+
+  try {
+    const { data: items, error } = await supabase
+      .from('items')
+      .select('id, display_name, ai_description')
+      .eq('status', 'approved')
+      .not('ai_description', 'is', null)
+      .neq('ai_description', '')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const candidates = (items || []).filter(item => item.ai_description && item.ai_description.trim());
+    if (!candidates.length) {
+      return res.json({ matched_item_id: null, match_score: 0, message: 'No eligible items available for blind matching.' });
+    }
+
+    const matches = await calculateMatchScoresWithGemini(item_description, candidates);
+    const bestMatch = matches.reduce((best, current) => current.match_score > best.match_score ? current : best, { id: null, match_score: 0 });
+    const matchedItem = candidates.find(item => item.id === bestMatch.id);
+
+    res.json({
+      matched_item_id: bestMatch.id,
+      match_score: bestMatch.match_score,
+      matched_item_name: matchedItem?.display_name || null,
+    });
+  } catch (err) {
+    console.error('[blindSearchMatch] Error', err);
+    res.status(500).json({ error: err.message || 'Blind match search failed' });
+  }
+};
+
+const submitLostReport = async (req, res) => {
+  const {
+    student_name,
+    contact_number,
+    student_email,
+    item_description,
+    date_missing,
+    time_missing,
+    last_location,
+    ref_photo_url_1,
+    ref_photo_url_2,
+    matched_item_id,
+    match_score,
+  } = req.body || {};
+
+  if (!student_name || !student_email || !item_description) {
+    return res.status(400).json({ error: 'student_name, student_email, and item_description are required' });
+  }
+
+  try {
+    const reportPayload = {
+      student_name,
+      contact_number: contact_number || '',
+      student_email,
+      item_description,
+      date_missing: date_missing || '',
+      time_missing: time_missing || '',
+      last_location: last_location || '',
+      ref_photo_url_1: ref_photo_url_1 || '',
+      ref_photo_url_2: ref_photo_url_2 || '',
+      matched_item_id: matched_item_id || null,
+      match_score: Number(match_score) || 0,
+      status: 'pending',
+    };
+
+    const { data, error } = await supabase.from('lost_reports').insert([reportPayload]).select();
+    if (error) throw error;
+
+    res.status(201).json({ message: 'Lost report submitted successfully', report: data[0] });
+  } catch (err) {
+    console.error('[submitLostReport] Error', err);
+    res.status(500).json({ error: err.message || 'Failed to submit lost report' });
+  }
+};
+
+const getLostReports = async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('lost_reports').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    console.error('[getLostReports] Error', err);
+    res.status(500).json({ error: err.message || 'Failed to fetch lost reports' });
+  }
+};
+
+const approveMatch = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('lost_reports')
+      .update({ status: 'matched' })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select();
+
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: 'Report not found or already processed' });
+    }
+
+    res.json({ message: 'Match approved successfully', report: data[0] });
+  } catch (err) {
+    console.error('[approveMatch] Error', err);
+    res.status(500).json({ error: err.message || 'Failed to approve match' });
+  }
+};
+
+const rejectMatch = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('lost_reports')
+      .update({ status: 'searching', matched_item_id: null, match_score: 0 })
+      .eq('id', id)
+      .eq('status', 'pending')
+      .select();
+
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: 'Report not found or already processed' });
+    }
+
+    res.json({ message: 'Match rejected successfully', report: data[0] });
+  } catch (err) {
+    console.error('[rejectMatch] Error', err);
+    res.status(500).json({ error: err.message || 'Failed to reject match' });
+  }
+};
+
 // Upload an item (base64 from IoT device or client)
 const uploadItem = async (req, res) => {
   try {
@@ -480,6 +685,11 @@ module.exports = {
   uploadItem,
   getItems,
   analyzeItem,
+  blindSearchMatch,
+  submitLostReport,
+  getLostReports,
+  approveMatch,
+  rejectMatch,
   approveItem,
   rejectItem,
   claimItem,
