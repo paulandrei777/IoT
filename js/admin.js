@@ -59,6 +59,8 @@ function showSection(sectionId) {
   }
 }
 
+window.showSection = showSection;
+
 // ========== STATUS FILTER CONTROLS ==========
 function addStatusFilterControls() {
   const section = document.getElementById('itemManagementSection');
@@ -251,10 +253,10 @@ async function loadClaimRequestsTable() {
     console.log('Loading claim requests table...');
     claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
 
-    // Fetch pending matched reports, then resolve the matched item explicitly for reliability.
+    // Fetch pending matched reports and join the matched item for display.
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, student_email, match_score, status, created_at, ref_photo_url_1, matched_item_id')
+      .select('*, items(*)')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false });
@@ -268,17 +270,24 @@ async function loadClaimRequestsTable() {
 
     let html = '';
     for (const report of reports) {
-      const { data: matchedItem, error: itemError } = await window.supabaseClient
-        .from('items')
-        .select('id, display_name, image_url')
-        .eq('id', report.matched_item_id)
-        .maybeSingle();
+      const matchedItem = Array.isArray(report.items) && report.items.length > 0 ? report.items[0] : report.items;
+      let resolvedMatchedItem = matchedItem;
 
-      if (itemError) {
-        console.warn('Failed to fetch matched item for claim request:', report.matched_item_id, itemError);
+      if (!resolvedMatchedItem && report.matched_item_id) {
+        const { data: fallbackItem, error: itemError } = await window.supabaseClient
+          .from('items')
+          .select('id, display_name, image_url')
+          .eq('id', report.matched_item_id)
+          .maybeSingle();
+
+        if (itemError) {
+          console.warn('Failed to fetch matched item for claim request:', report.matched_item_id, itemError);
+        }
+
+        resolvedMatchedItem = fallbackItem;
       }
 
-      const itemPublicUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : FALLBACK_ITEM_IMAGE;
+      const itemPublicUrl = resolvedMatchedItem?.image_url ? getSupabasePublicUrl(resolvedMatchedItem.image_url) : FALLBACK_ITEM_IMAGE;
       const studentPublicUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
 
       const itemPhotoHtml = `<img src="${itemPublicUrl}" alt="Item" class="table-thumbnail" onclick="openLightbox('${itemPublicUrl}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;" onerror="this.onerror=null;this.src='${FALLBACK_ITEM_IMAGE}'">`;
@@ -295,7 +304,7 @@ async function loadClaimRequestsTable() {
 
       html += `
         <tr>
-          <td>${matchedItem?.display_name || 'N/A'}</td>
+          <td>${resolvedMatchedItem?.display_name || 'N/A'}</td>
           <td>${report.student_email || 'N/A'}</td>
           <td>${requestDate}</td>
           <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
@@ -304,7 +313,7 @@ async function loadClaimRequestsTable() {
               ${itemPhotoHtml}
               ${studentPhotoHtml}
               <span class="match-score" title="AI Match Score" style="font-weight: bold; color: #D32F2F;">${report.match_score || 0}%</span>
-              <button class="btn btn-small" data-report-id="${report.id}" data-item-id="${matchedItem?.id || ''}" data-item-image-url="${itemPublicUrl}" data-student-image-url="${studentPublicUrl || ''}" data-match-score="${report.match_score}" data-student-email="${report.student_email}" onclick="handleVerifyClaim(this)">Verify</button>
+              <button class="btn btn-small" data-report-id="${report.id}" data-item-id="${resolvedMatchedItem?.id || ''}" data-item-image-url="${itemPublicUrl}" data-student-image-url="${studentPublicUrl || ''}" data-match-score="${report.match_score}" data-student-email="${report.student_email}" onclick="handleVerifyClaim(this)">Verify</button>
             </div>
           </td>
         </tr>
@@ -671,6 +680,20 @@ async function loadUserProfile() {
       return;
     }
 
+    const userNameEl = document.getElementById('userName');
+    const userEmailEl = document.getElementById('userEmail');
+    const userRoleEl = document.getElementById('userRole');
+
+    if (userNameEl) {
+      userNameEl.textContent = session.user.user_metadata?.full_name || session.user.email || 'Admin';
+    }
+    if (userEmailEl) {
+      userEmailEl.textContent = session.user.email || '';
+    }
+    if (userRoleEl) {
+      userRoleEl.textContent = 'Administrator';
+    }
+
     // Fetch profile using the getProfile function from auth.js
     if (typeof getProfile !== 'function') {
       console.warn('getProfile function not available');
@@ -680,15 +703,11 @@ async function loadUserProfile() {
     const profile = await getProfile(session.user.id);
     
     // Update UI with profile data
-    const userNameEl = document.getElementById('userName');
-    const userEmailEl = document.getElementById('userEmail');
-    const userRoleEl = document.getElementById('userRole');
-
     if (userNameEl) {
-      userNameEl.textContent = profile?.full_name || 'Admin';
+      userNameEl.textContent = profile?.full_name || userNameEl.textContent || 'Admin';
     }
     if (userEmailEl) {
-      userEmailEl.textContent = profile?.email || '';
+      userEmailEl.textContent = profile?.email || userEmailEl.textContent || session.user.email || '';
     }
     if (userRoleEl) {
       userRoleEl.textContent = 'Administrator';
@@ -884,6 +903,9 @@ async function approveClaim(reportId, itemId) {
     closeClaimVerificationModal();
     loadItemsTable();
     loadClaimRequestsTable();
+    loadLostItemsTable();
+    fetchDashboardStats();
+    loadVerificationHub();
   } catch (error) {
     console.error('Error approving claim:', error);
     alert('Failed to approve claim: ' + error.message);
