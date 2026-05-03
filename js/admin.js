@@ -1,6 +1,4 @@
-// HUWAG gumamit ng 'const' o 'let' dito kung na-declare na sa auth.js
-// Gagamitin lang natin ang existing window.supabaseClient
-var supabase = window.supabaseClient || window.supabase;
+const supabase = window.supabaseClient || window.supabase;
 
 // I-check kung gumagana na
 console.log("Checking Supabase connection...");
@@ -200,23 +198,30 @@ async function loadLostItemsTable() {
 
     console.log('Loading lost items table...');
     lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
+    console.log('Attempting to fetch from table...');
 
     // Fetch lost reports that have no matched_item_id
-    const { data: reports, error } = await window.supabaseClient
+    const { data, error } = await window.supabaseClient
       .from('lost_reports')
       .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
       .is('matched_item_id', null)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database Fetch Error:', error.message);
+      throw error;
+    }
 
-    if (!reports || reports.length === 0) {
+    console.log('Data received from Supabase:', data);
+    console.log('Reports Found:', data ? data.length : 0);
+
+    if (!data || data.length === 0) {
       lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No unmatched lost items.</td></tr>';
       return;
     }
 
     let html = '';
-    for (const report of reports) {
+    for (const report of data) {
       const reportDate = new Date(report.created_at).toLocaleDateString('en-US', { 
         month: 'short', 
         day: 'numeric', 
@@ -237,9 +242,9 @@ async function loadLostItemsTable() {
     }
 
     lostItemsTableBody.innerHTML = html;
-    console.log('Lost items table loaded with', reports.length, 'reports');
+    console.log('Lost items table loaded with', data.length, 'reports');
   } catch (error) {
-    console.error('Error loading lost items table:', error);
+    console.error('Supabase Error:', error.message);
     const lostItemsTableBody = document.getElementById('lostItemsTableBody');
     if (lostItemsTableBody) {
       lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
@@ -263,24 +268,31 @@ async function loadClaimRequestsTable() {
 
     console.log('Loading claim requests table...');
     claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
+    console.log('Attempting to fetch from table...');
 
     // Fetch pending matched reports and join the matched item for display.
-    const { data: reports, error } = await window.supabaseClient
+    const { data, error } = await window.supabaseClient
       .from('lost_reports')
       .select('*, items(*)')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Database Fetch Error:', error.message);
+      throw error;
+    }
 
-    if (!reports || reports.length === 0) {
+    console.log('Data received from Supabase:', data);
+    console.log('Reports Found:', data ? data.length : 0);
+
+    if (!data || data.length === 0) {
       claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No claim requests.</td></tr>';
       return;
     }
 
     let html = '';
-    for (const report of reports) {
+    for (const report of data) {
       const matchedItem = Array.isArray(report.items) && report.items.length > 0 ? report.items[0] : report.items;
       let resolvedMatchedItem = matchedItem;
 
@@ -332,10 +344,10 @@ async function loadClaimRequestsTable() {
     }
 
     claimRequestsTableBody.innerHTML = html;
-    console.log('Claim requests table loaded with', reports.length, 'requests');
-    console.log('Claim data:', reports);
+    console.log('Claim requests table loaded with', data.length, 'requests');
+    console.log('Claim data:', data);
   } catch (error) {
-    console.error('Error loading claim requests table:', error);
+    console.error('Supabase Error:', error.message);
     const claimRequestsTableBody = document.getElementById('claimRequestsTableBody');
     if (claimRequestsTableBody) {
       claimRequestsTableBody.innerHTML = '<tr><td colspan="6" class="error">Error loading requests. Please refresh.</td></tr>';
