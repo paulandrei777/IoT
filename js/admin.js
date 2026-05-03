@@ -8,6 +8,7 @@ let sidebarClose;
 let refreshBtn;
 let verificationContainer;
 let currentSection = 'dashboard';
+const FALLBACK_ITEM_IMAGE = '/assets/images/domini.png';
 
 // ========== SECTION SWITCHING ==========
 let currentStatusFilter = 'all';
@@ -190,7 +191,7 @@ async function loadLostItemsTable() {
     // Fetch lost reports that have no matched_item_id
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('*')
+      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
       .is('matched_item_id', null)
       .order('created_at', { ascending: false });
 
@@ -250,20 +251,10 @@ async function loadClaimRequestsTable() {
     console.log('Loading claim requests table...');
     claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
 
-    // Fetch lost reports with matched items (left join with items) - only pending status
+    // Fetch pending matched reports, then resolve the matched item explicitly for reliability.
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select(`
-        id,
-        student_name,
-        student_email,
-        match_score,
-        status,
-        created_at,
-        ref_photo_url_1,
-        matched_item_id,
-        items(id, display_name, image_url)
-      `)
+      .select('id, student_name, student_email, match_score, status, created_at, ref_photo_url_1, matched_item_id')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false });
@@ -277,14 +268,20 @@ async function loadClaimRequestsTable() {
 
     let html = '';
     for (const report of reports) {
-      const matchedItem = Array.isArray(report.items) && report.items.length > 0 ? report.items[0] : report.items;
+      const { data: matchedItem, error: itemError } = await window.supabaseClient
+        .from('items')
+        .select('id, display_name, image_url')
+        .eq('id', report.matched_item_id)
+        .maybeSingle();
 
-      const itemPublicUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
+      if (itemError) {
+        console.warn('Failed to fetch matched item for claim request:', report.matched_item_id, itemError);
+      }
+
+      const itemPublicUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : FALLBACK_ITEM_IMAGE;
       const studentPublicUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
 
-      const itemPhotoHtml = itemPublicUrl
-        ? `<img src="${itemPublicUrl}" alt="Item" class="table-thumbnail" onclick="openLightbox('${itemPublicUrl}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
-        : '<span class="no-image">-</span>';
+      const itemPhotoHtml = `<img src="${itemPublicUrl}" alt="Item" class="table-thumbnail" onclick="openLightbox('${itemPublicUrl}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;" onerror="this.onerror=null;this.src='${FALLBACK_ITEM_IMAGE}'">`;
 
       const studentPhotoHtml = studentPublicUrl
         ? `<img src="${studentPublicUrl}" alt="Reference" class="table-thumbnail" onclick="openLightbox('${studentPublicUrl}')" title="Student Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
@@ -307,7 +304,7 @@ async function loadClaimRequestsTable() {
               ${itemPhotoHtml}
               ${studentPhotoHtml}
               <span class="match-score" title="AI Match Score" style="font-weight: bold; color: #D32F2F;">${report.match_score || 0}%</span>
-              <button class="btn btn-small" data-report-id="${report.id}" data-item-id="${matchedItem?.id}" data-match-score="${report.match_score}" data-student-email="${report.student_email}" onclick="handleVerifyClaim(this)">Verify</button>
+              <button class="btn btn-small" data-report-id="${report.id}" data-item-id="${matchedItem?.id || ''}" data-item-image-url="${itemPublicUrl}" data-student-image-url="${studentPublicUrl || ''}" data-match-score="${report.match_score}" data-student-email="${report.student_email}" onclick="handleVerifyClaim(this)">Verify</button>
             </div>
           </td>
         </tr>
@@ -852,11 +849,13 @@ function handleVerifyClaim(button) {
   const itemId = button.dataset.itemId;
   const matchScore = button.dataset.matchScore;
   const studentEmail = button.dataset.studentEmail;
+  const itemImageUrl = button.dataset.itemImageUrl;
+  const studentImageUrl = button.dataset.studentImageUrl;
   
-  console.log('Verifying claim:', { reportId, itemId, matchScore, studentEmail });
+  console.log('Verifying claim:', { reportId, itemId, matchScore, studentEmail, itemImageUrl, studentImageUrl });
   
   // Open claim verification modal
-  openClaimVerificationModal(reportId, itemId, matchScore, studentEmail);
+  openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl, studentImageUrl);
 }
 
 // ========== APPROVE CLAIM ==========
@@ -883,6 +882,7 @@ async function approveClaim(reportId, itemId) {
     console.log('Claim approved successfully');
     alert('? Claim approved! Item marked as CLAIMED.');
     closeClaimVerificationModal();
+    loadItemsTable();
     loadClaimRequestsTable();
   } catch (error) {
     console.error('Error approving claim:', error);
@@ -915,7 +915,7 @@ async function rejectClaim(reportId) {
 }
 
 // ========== CLAIM VERIFICATION MODAL ==========
-function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail) {
+function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl = '', studentImageUrl = '') {
   const modal = document.getElementById('claimVerificationModal');
   if (!modal) {
     console.warn('claimVerificationModal element not found');
@@ -936,6 +936,24 @@ function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail) 
   const emailDisplay = document.getElementById('claimStudentEmail');
   if (emailDisplay) {
     emailDisplay.textContent = studentEmail || 'N/A';
+  }
+
+  const itemImageEl = document.getElementById('claimItemImage');
+  if (itemImageEl) {
+    itemImageEl.src = itemImageUrl || FALLBACK_ITEM_IMAGE;
+    itemImageEl.onerror = () => {
+      itemImageEl.onerror = null;
+      itemImageEl.src = FALLBACK_ITEM_IMAGE;
+    };
+  }
+
+  const studentImageEl = document.getElementById('claimStudentImage');
+  if (studentImageEl) {
+    studentImageEl.src = studentImageUrl || FALLBACK_ITEM_IMAGE;
+    studentImageEl.onerror = () => {
+      studentImageEl.onerror = null;
+      studentImageEl.src = FALLBACK_ITEM_IMAGE;
+    };
   }
   
   // Show modal
