@@ -344,8 +344,8 @@ async function loadClaimRequestsTable() {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
       .select('*')
+      .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
-      .or('status.eq.pending,status.is.null')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -523,8 +523,8 @@ async function loadVerificationHub() {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
       .select('*')
+      .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
-      .or('status.eq.pending,status.is.null')
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -626,6 +626,7 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
       loadClaimRequestsTable(),
       loadItemsTable(),
       updateDashboardStats(),
+      loadResolvedTransactionsTable(),
     ]);
 
     showAdminToast('Match Approved! Item marked as claimed');
