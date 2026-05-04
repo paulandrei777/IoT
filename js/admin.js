@@ -462,6 +462,7 @@ async function loadVerificationHub() {
                   <h4>Student Reference Photo</h4>
                   ${refImgUrl ? `<img src="${refImgUrl}" alt="Reference" onclick="openLightbox('${refImgUrl}')">` : '<p class="no-image">No image provided</p>'}
                 </div>
+                <div class="verification-vs-badge" aria-hidden="true">VS</div>
                 <div class="image-section">
                   <h4>Office Item Image</h4>
                   ${itemImgUrl ? `<img src="${itemImgUrl}" alt="Item" onclick="openLightbox('${itemImgUrl}')">` : '<p class="no-image">No matched item</p>'}
@@ -779,7 +780,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     initPage();
     await fetchDashboardStats();
     await loadVerificationHub();
-    await loadItemsTable();
 
     console.log('=== Admin Dashboard Initialization Complete ===');
   } catch (error) {
