@@ -166,6 +166,10 @@ async function loadLostItemsTable() {
       const reportDate = new Date(report.created_at).toLocaleDateString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
       });
+      const reportPayload = encodeURIComponent(JSON.stringify({
+        ...report,
+        reportDate,
+      }));
 
       return `
         <tr>
@@ -173,10 +177,10 @@ async function loadLostItemsTable() {
           <td>${report.item_description
             ? report.item_description.substring(0, 50) + (report.item_description.length > 50 ? '...' : '')
             : 'N/A'}</td>
-          <td>${report.last_location || 'Not specified'}</td>
+          <td>${reportDate}</td>
           <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
           <td>
-            <button class="btn btn-small" data-report-id="${report.id}" onclick="handleViewLostItem(this)">View</button>
+            <button class="btn btn-small" data-report='${reportPayload}' onclick="handleViewLostItem(this)">View</button>
           </td>
         </tr>`;
     }).join('');
@@ -186,6 +190,91 @@ async function loadLostItemsTable() {
     console.error('[loadLostItemsTable] Error:', error);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
   }
+}
+
+function ensureLostReportModal() {
+  let modal = document.getElementById('lostReportModal');
+  if (modal) return modal;
+
+  modal = document.createElement('div');
+  modal.id = 'lostReportModal';
+  modal.className = 'modal';
+  modal.style.display = 'none';
+  modal.innerHTML = `
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeLostReportModal()">&times;</button>
+      <div class="modal-header">
+        <div>
+          <h3 id="lostReportModalTitle">Lost Report Details</h3>
+          <p class="modal-subtitle" id="lostReportModalSubtitle"></p>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="modal-image-wrapper">
+          <img id="lostReportModalImage" src="" alt="Reference photo">
+        </div>
+        <div class="modal-fields">
+          <p><strong>Student Name:</strong> <span id="lostReportModalStudentName"></span></p>
+          <p><strong>Description:</strong> <span id="lostReportModalDescription"></span></p>
+          <p><strong>Date:</strong> <span id="lostReportModalDate"></span></p>
+          <p><strong>Location:</strong> <span id="lostReportModalLocation"></span></p>
+          <p><strong>Status:</strong> <span id="lostReportModalStatus"></span></p>
+          <p><strong>Matched Item ID:</strong> <span id="lostReportModalMatchedItemId"></span></p>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeLostReportModal()">Close</button>
+      </div>
+    </div>`;
+
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeLostReportModal();
+  });
+
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function openLostReportModal(report) {
+  const modal = ensureLostReportModal();
+  const reportDate = report.reportDate || new Date(report.created_at).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+
+  const title = document.getElementById('lostReportModalTitle');
+  const subtitle = document.getElementById('lostReportModalSubtitle');
+  const image = document.getElementById('lostReportModalImage');
+
+  if (title) title.textContent = report.student_name || 'Lost Report';
+  if (subtitle) subtitle.textContent = `Submitted on ${reportDate}`;
+  if (image) {
+    const refImageUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+    image.src = refImageUrl || FALLBACK_ITEM_IMAGE;
+    image.alt = `${report.student_name || 'Student'} reference photo`;
+    image.onerror = () => {
+      image.onerror = null;
+      image.src = FALLBACK_ITEM_IMAGE;
+    };
+  }
+
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value || 'N/A';
+  };
+
+  setText('lostReportModalStudentName', report.student_name);
+  setText('lostReportModalDescription', report.item_description || 'N/A');
+  setText('lostReportModalDate', reportDate);
+  setText('lostReportModalLocation', report.last_location || 'Not specified');
+  setText('lostReportModalStatus', (report.status || 'pending').toUpperCase());
+  setText('lostReportModalMatchedItemId', report.matched_item_id || 'None');
+
+  modal.style.display = 'flex';
+}
+
+function closeLostReportModal() {
+  const modal = document.getElementById('lostReportModal');
+  if (modal) modal.style.display = 'none';
 }
 
 // ========== CLAIM REQUESTS TABLE ==========
@@ -210,6 +299,7 @@ async function loadClaimRequestsTable() {
     if (error) throw error;
 
     console.log(`[loadClaimRequestsTable] Rows fetched: ${reports?.length ?? 0}`);
+    console.log('[loadClaimRequestsTable] matched_item_id values:', reports?.map(report => report.matched_item_id));
     console.table(reports);
 
     if (!reports || reports.length === 0) {
@@ -236,7 +326,7 @@ async function loadClaimRequestsTable() {
           }
         }
 
-        console.log(`[loadClaimRequestsTable] Report ${report.id} → matched item:`, matchedItem);
+        console.log(`[loadClaimRequestsTable] Report ${report.id} → matched_item_id: ${report.matched_item_id}`, matchedItem);
         return { report, matchedItem };
       })
     );
@@ -333,11 +423,15 @@ async function loadVerificationHub() {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
       .select('*')
-      .in('status', ['pending', 'matched'])
+      .eq('status', 'pending')
+      .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false })
       .limit(10);
 
     if (error) throw error;
+
+    console.log(`[loadVerificationHub] Rows fetched: ${reports?.length ?? 0}`);
+    console.log('[loadVerificationHub] matched_item_id values:', reports?.map(report => report.matched_item_id));
 
     if (!reports || reports.length === 0) {
       verificationContainer.innerHTML = '<p class="no-data">No reports to verify.</p>';
@@ -399,18 +493,9 @@ async function loadVerificationHub() {
 async function approveMatch(reportId, itemId) {
   if (!window.supabaseClient) return;
   try {
-    const { error: reportError } = await window.supabaseClient
-      .from('lost_reports').update({ status: 'approved' }).eq('id', reportId);
-    if (reportError) throw reportError;
-
-    if (itemId) {
-      const { error: itemError } = await window.supabaseClient
-        .from('items').update({ status: 'matched' }).eq('id', itemId);
-      if (itemError) throw itemError;
-    }
-
+    await commitApprovedMatch(reportId, itemId);
     alert('Match approved successfully!');
-    await Promise.all([loadVerificationHub(), fetchDashboardStats()]);
+    await refreshMatchViews();
   } catch (error) {
     console.error('[approveMatch] Error:', error);
     alert('Error approving match: ' + error.message);
@@ -420,12 +505,9 @@ async function approveMatch(reportId, itemId) {
 async function rejectMatch(reportId) {
   if (!window.supabaseClient) return;
   try {
-    const { error } = await window.supabaseClient
-      .from('lost_reports').update({ status: 'rejected' }).eq('id', reportId);
-    if (error) throw error;
-
+    await commitRejectedMatch(reportId);
     alert('Match rejected successfully!');
-    await Promise.all([loadVerificationHub(), fetchDashboardStats()]);
+    await refreshMatchViews();
   } catch (error) {
     console.error('[rejectMatch] Error:', error);
     alert('Error rejecting match: ' + error.message);
@@ -434,19 +516,11 @@ async function rejectMatch(reportId) {
 
 // ========== APPROVE / REJECT CLAIM ==========
 async function approveClaim(reportId, itemId) {
-  if (!window.supabaseClient) return;
   try {
-    const { error: r } = await window.supabaseClient
-      .from('lost_reports').update({ status: 'matched' }).eq('id', reportId);
-    if (r) throw r;
-
-    const { error: i } = await window.supabaseClient
-      .from('items').update({ status: 'claimed' }).eq('id', itemId);
-    if (i) throw i;
-
+    await commitApprovedMatch(reportId, itemId);
     alert('✅ Claim approved! Item marked as CLAIMED.');
     closeClaimVerificationModal();
-    await Promise.all([loadItemsTable(), loadClaimRequestsTable(), loadLostItemsTable(), fetchDashboardStats(), loadVerificationHub()]);
+    await refreshMatchViews();
   } catch (error) {
     console.error('[approveClaim] Error:', error);
     alert('Failed to approve claim: ' + error.message);
@@ -454,19 +528,58 @@ async function approveClaim(reportId, itemId) {
 }
 
 async function rejectClaim(reportId) {
-  if (!window.supabaseClient) return;
   try {
-    const { error } = await window.supabaseClient
-      .from('lost_reports').update({ matched_item_id: null, status: 'pending' }).eq('id', reportId);
-    if (error) throw error;
+    await commitRejectedMatch(reportId);
 
     alert('❌ Claim rejected! Report moved back to Lost Items.');
     closeClaimVerificationModal();
-    await Promise.all([loadClaimRequestsTable(), loadLostItemsTable()]);
+    await refreshMatchViews();
   } catch (error) {
     console.error('[rejectClaim] Error:', error);
     alert('Failed to reject claim: ' + error.message);
   }
+}
+
+async function commitApprovedMatch(reportId, itemId) {
+  const resolvedItemId = itemId || await resolveMatchedItemId(reportId);
+  const { error: reportError } = await window.supabaseClient
+    .from('lost_reports').update({ status: 'matched' }).eq('id', reportId);
+
+  if (reportError) throw reportError;
+
+  if (resolvedItemId) {
+    const { error: itemError } = await window.supabaseClient
+      .from('items').update({ status: 'claimed' }).eq('id', resolvedItemId);
+    if (itemError) throw itemError;
+  }
+}
+
+async function commitRejectedMatch(reportId) {
+  const { error } = await window.supabaseClient
+    .from('lost_reports').update({ matched_item_id: null, status: 'pending' }).eq('id', reportId);
+
+  if (error) throw error;
+}
+
+async function resolveMatchedItemId(reportId) {
+  const { data, error } = await window.supabaseClient
+    .from('lost_reports')
+    .select('matched_item_id')
+    .eq('id', reportId)
+    .single();
+
+  if (error) throw error;
+  return data?.matched_item_id || null;
+}
+
+async function refreshMatchViews() {
+  await Promise.all([
+    loadItemsTable(),
+    loadLostItemsTable(),
+    loadClaimRequestsTable(),
+    loadVerificationHub(),
+    fetchDashboardStats(),
+  ]);
 }
 
 // ========== SUPABASE URL HELPER ==========
@@ -676,9 +789,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ========== LOST ITEM VIEW (placeholder) ==========
 function handleViewLostItem(button) {
-  const reportId = button.dataset.reportId;
-  console.log('Viewing lost item report:', reportId);
-  alert(`Report ID: ${reportId}\nFull report detail modal — coming soon.`);
+  try {
+    const reportPayload = button?.dataset?.report;
+    if (!reportPayload) {
+      console.warn('[handleViewLostItem] Missing report payload');
+      return;
+    }
+
+    const report = JSON.parse(decodeURIComponent(reportPayload));
+    console.log('[handleViewLostItem] Opening report:', report.id, 'matched_item_id:', report.matched_item_id);
+    openLostReportModal(report);
+  } catch (error) {
+    console.error('[handleViewLostItem] Error:', error);
+    alert('Unable to open report details.');
+  }
 }
 
 // ========== CLAIM VERIFY HANDLER ==========
