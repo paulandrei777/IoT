@@ -459,19 +459,19 @@ async function fetchDashboardStats() {
     const [
       { count: totalItems },
       { count: pendingReports },
-      { count: resolvedReports },
+      { count: claimedItems },
     ] = await Promise.all([
       window.supabaseClient.from('items').select('*', { count: 'exact', head: true }),
       window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'resolved'),
+      window.supabaseClient.from('items').select('*', { count: 'exact', head: true }).eq('status', 'claimed'),
     ]);
 
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? 0; };
     set('totalItems', totalItems);
     set('pendingReports', pendingReports);
-    set('matchedReports', resolvedReports);
+    set('matchedReports', claimedItems);
 
-    console.log('[fetchDashboardStats]', { totalItems, pendingReports, matchedReports });
+    console.log('[fetchDashboardStats]', { totalItems, pendingReports, claimedItems });
   } catch (error) {
     console.error('[fetchDashboardStats] Error:', error);
   }
@@ -485,27 +485,37 @@ async function loadResolvedTransactionsTable() {
   tbody.innerHTML = '<tr><td colspan="3" class="no-data">Loading resolved transactions...</td></tr>';
 
   try {
-    const { data: reports, error } = await window.supabaseClient
-      .from('lost_reports')
-      .select('id, student_name, created_at, matched_item_id')
-      .eq('status', 'resolved')
+    // Query items that have been claimed
+    const { data: items, error } = await window.supabaseClient
+      .from('items')
+      .select('id, display_name, created_at')
+      .eq('status', 'claimed')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    if (!reports || reports.length === 0) {
+    if (!items || items.length === 0) {
       tbody.innerHTML = '<tr><td colspan="3" class="no-data">No resolved transactions found.</td></tr>';
       return;
     }
 
-    const rows = await Promise.all(reports.map(async r => {
-      let itemName = 'N/A';
-      if (r.matched_item_id) {
-        const { data } = await window.supabaseClient.from('items').select('display_name').eq('id', r.matched_item_id).maybeSingle();
-        itemName = data?.display_name || 'N/A';
+    // For each claimed item, find the student who claimed it
+    const rows = await Promise.all(items.map(async item => {
+      let studentName = 'N/A';
+      // Find the resolved report that matches this item
+      const { data: report } = await window.supabaseClient
+        .from('lost_reports')
+        .select('student_name')
+        .eq('matched_item_id', item.id)
+        .eq('status', 'resolved')
+        .maybeSingle();
+      
+      if (report) {
+        studentName = report.student_name || 'N/A';
       }
-      const date = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return `<tr><td>${r.student_name || 'N/A'}</td><td>${itemName}</td><td>${date}</td></tr>`;
+      
+      const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `<tr><td>${studentName}</td><td>${item.display_name || 'N/A'}</td><td>${date}</td></tr>`;
     }));
 
     tbody.innerHTML = rows.join('');
@@ -646,7 +656,7 @@ async function rejectMatch(reportId, triggerButton = null) {
 
     const { error } = await window.supabaseClient
       .from('lost_reports')
-      .update({ matched_item_id: null, match_score: 0 })
+      .update({ matched_item_id: null, match_score: 0, status: 'pending' })
       .eq('id', reportId);
 
     if (error) throw error;
@@ -656,7 +666,7 @@ async function rejectMatch(reportId, triggerButton = null) {
       loadClaimRequestsTable(),
       loadItemsTable(),
       loadLostItemsTable(),
-      fetchDashboardStats(),
+      updateDashboardStats(),
     ]);
 
     showAdminToast('Match Rejected! Report moved to Lost Items');
@@ -718,14 +728,14 @@ async function commitRejectedMatch(reportId) {
 async function updateDashboardStats() {
   if (!window.supabaseClient) return;
   try {
-    const { count: resolvedReports } = await window.supabaseClient
-      .from('lost_reports')
+    const { count: claimedItems } = await window.supabaseClient
+      .from('items')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'resolved');
+      .eq('status', 'claimed');
 
     const el = document.getElementById('matchedReports');
-    if (el) el.textContent = resolvedReports ?? 0;
-    console.log('[updateDashboardStats] resolvedReports:', resolvedReports);
+    if (el) el.textContent = claimedItems ?? 0;
+    console.log('[updateDashboardStats] claimedItems:', claimedItems);
   } catch (err) {
     console.error('[updateDashboardStats] Error:', err);
   }
