@@ -1,86 +1,56 @@
-var supabase = window.supabaseClient || window.supabase;
-
-// I-check kung gumagana na
+// ========== SUPABASE CLIENT SAFETY CHECK ==========
+// NOTE: Never redeclare 'supabase' as a var — always use window.supabaseClient
 console.log("Checking Supabase connection...");
-if (supabase) {
-    console.log("✅ Supabase is ready and connected to Admin Panel");
+if (window.supabaseClient) {
+  console.log("✅ Supabase is ready and connected to Admin Panel");
 } else {
-    console.error("❌ Supabase client NOT FOUND. Check your script loading order.");
+  console.error("❌ Supabase client NOT FOUND. Check your script loading order.");
 }
-// ========== ADMIN DASHBOARD INITIALIZATION ==========
-// DOM Elements
-let logoutBtn;
-let hamburgerBtn;
-let sidebarOverlay;
-let sidebar;
-let sidebarClose;
-let refreshBtn;
-let verificationContainer;
-let currentSection = 'dashboard';
+
+// ========== CONSTANTS & STATE ==========
 const FALLBACK_ITEM_IMAGE = '/assets/images/domini.png';
+let currentSection = 'dashboard';
+let currentStatusFilter = 'all';
+let currentItemId = null;
+
+// DOM element references (populated on DOMContentLoaded)
+let logoutBtn, hamburgerBtn, sidebarOverlay, sidebar, sidebarClose, refreshBtn, verificationContainer;
 
 // ========== SECTION SWITCHING ==========
-let currentStatusFilter = 'all';
-
 function showSection(sectionId) {
   try {
     console.log('Switching to section:', sectionId);
-    
-    // Hide all admin sections
-    document.querySelectorAll('.admin-section').forEach(section => {
-      section.style.display = 'none';
-    });
 
-    // Show the requested section
+    document.querySelectorAll('.admin-section').forEach(s => (s.style.display = 'none'));
+
     const targetSection = document.getElementById(sectionId + 'Section');
     if (targetSection) {
       targetSection.style.display = 'block';
-      console.log('Section displayed:', sectionId);
     } else {
       console.warn('Section not found:', sectionId);
     }
 
-    // Update nav links
-    document.querySelectorAll('.nav-link').forEach(link => {
-      link.classList.remove('active');
-    });
-    
+    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
     currentSection = sectionId;
-    
-    // Load data for the selected section
-    if (sectionId === 'itemManagement') {
-      loadItemsTable();
-    } else if (sectionId === 'lostItems') {
-      loadLostItemsTable();
-    } else if (sectionId === 'claimRequests') {
-      loadClaimRequestsTable();
-    }
-    
-    // Close sidebar on mobile
-    if (sidebar) {
-      sidebar.classList.remove('active');
-    }
-    if (sidebarOverlay) {
-      sidebarOverlay.classList.remove('active');
-    }
+
+    if (sectionId === 'itemManagement') loadItemsTable();
+    else if (sectionId === 'lostItems') loadLostItemsTable();
+    else if (sectionId === 'claimRequests') loadClaimRequestsTable();
+
+    if (sidebar) sidebar.classList.remove('active');
+    if (sidebarOverlay) sidebarOverlay.classList.remove('active');
   } catch (error) {
     console.error('Error switching section:', error);
   }
 }
-
 window.showSection = showSection;
 
-// ========== STATUS FILTER CONTROLS ==========
+// ========== STATUS FILTER ==========
 function addStatusFilterControls() {
   const section = document.getElementById('itemManagementSection');
-  let filterContainer = document.getElementById('statusFilterContainer');
-  
-  // Only add filter once
-  if (filterContainer) return;
-  
-  if (!section) return;
-  
-  filterContainer = document.createElement('div');
+  if (!section || document.getElementById('statusFilterContainer')) return;
+
+  const filterContainer = document.createElement('div');
   filterContainer.id = 'statusFilterContainer';
   filterContainer.className = 'filter-controls';
   filterContainer.innerHTML = `
@@ -92,12 +62,9 @@ function addStatusFilterControls() {
       <option value="claimed">Claimed</option>
     </select>
   `;
-  
-  // Insert after description
+
   const description = section.querySelector('.section-description');
-  if (description) {
-    description.parentNode.insertBefore(filterContainer, description.nextSibling);
-  }
+  if (description) description.parentNode.insertBefore(filterContainer, description.nextSibling);
 }
 
 function changeStatusFilter(status) {
@@ -105,321 +72,297 @@ function changeStatusFilter(status) {
   loadItemsTable();
 }
 
-// ========== ITEMS TABLE LOADING ==========
+// ========== ITEMS TABLE ==========
 async function loadItemsTable() {
+  const tbody = document.getElementById('itemsTableBody');
+  if (!tbody || !window.supabaseClient) return;
+
+  tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading items...</td></tr>';
+  addStatusFilterControls();
+
   try {
-    if (!window.supabaseClient) {
-      console.warn('Supabase client not available');
-      return;
-    }
-
-    const itemsTableBody = document.getElementById('itemsTableBody');
-    if (!itemsTableBody) {
-      console.warn('itemsTableBody element not found');
-      return;
-    }
-
-    console.log('Loading items table with status filter:', currentStatusFilter);
-    itemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading items...</td></tr>';
-
-    // Add filter controls
-    addStatusFilterControls();
-
-    // Build query with optional status filter
     let query = window.supabaseClient
       .from('items')
       .select('*')
       .order('created_at', { ascending: false });
 
-    // Apply status filter if not 'all'
-    if (currentStatusFilter !== 'all') {
-      query = query.eq('status', currentStatusFilter);
-    }
+    if (currentStatusFilter !== 'all') query = query.eq('status', currentStatusFilter);
 
     const { data: items, error } = await query;
-
     if (error) throw error;
 
+    console.log(`[loadItemsTable] Rows fetched: ${items?.length ?? 0}`);
+    console.table(items);
+
     if (!items || items.length === 0) {
-      itemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No items found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No items found.</td></tr>';
       return;
     }
 
-    let html = '';
-    for (const item of items) {
-      // Build public URL if image_url exists
+    tbody.innerHTML = items.map(item => {
       const publicImageUrl = item.image_url ? getSupabasePublicUrl(item.image_url) : '';
       const imageHtml = publicImageUrl
-        ? `<img src="${publicImageUrl}" alt="${item.display_name}" class="table-thumbnail" onclick="openLightbox('${publicImageUrl}')" style="cursor: pointer; max-height: 60px; max-width: 60px; border-radius: 4px;">`
+        ? `<img src="${publicImageUrl}" alt="${item.display_name || ''}" class="table-thumbnail"
+             onclick="openLightbox('${publicImageUrl}')"
+             style="cursor:pointer;max-height:60px;max-width:60px;border-radius:4px;">`
         : '<span class="no-image">No image</span>';
 
-      // Truncate AI description
-      const truncatedDescription = item.ai_description 
+      const truncatedDesc = item.ai_description
         ? item.ai_description.substring(0, 50) + (item.ai_description.length > 50 ? '...' : '')
         : 'N/A';
 
-      html += `
+      return `
         <tr>
           <td>${imageHtml}</td>
           <td>${item.display_name || 'N/A'}</td>
-          <td>${truncatedDescription}</td>
+          <td>${truncatedDesc}</td>
           <td><span class="status-badge status-${item.status || 'pending'}">${(item.status || 'pending').toUpperCase()}</span></td>
           <td>
-            <button class="btn btn-small" data-item-id="${item.id}" data-image-url="${publicImageUrl}" data-item-name="${item.display_name || ''}" data-item-desc="${item.ai_description || ''}" data-item-status="${item.status || 'pending'}" onclick="handleViewClick(this)">View</button>
+            <button class="btn btn-small"
+              data-item-id="${item.id}"
+              data-image-url="${publicImageUrl}"
+              data-item-name="${item.display_name || ''}"
+              data-item-desc="${item.ai_description || ''}"
+              data-item-status="${item.status || 'pending'}"
+              onclick="handleViewClick(this)">View</button>
           </td>
-        </tr>
-      `;
-    }
+        </tr>`;
+    }).join('');
 
-    itemsTableBody.innerHTML = html;
-    console.log('Items table loaded with', items.length, 'items');
+    console.log('[loadItemsTable] Table rendered successfully.');
   } catch (error) {
-    console.error('Error loading items table:', error);
-    const itemsTableBody = document.getElementById('itemsTableBody');
-    if (itemsTableBody) {
-      itemsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading items. Please refresh.</td></tr>';
-    }
+    console.error('[loadItemsTable] Error:', error);
+    tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading items. Please refresh.</td></tr>';
   }
 }
 
-// ========== LOST ITEMS TABLE LOADING ==========
+// ========== LOST ITEMS TABLE ==========
+// FIX: Shows reports where matched_item_id IS NULL (unmatched/pending reports)
+// ROOT CAUSE EXPLAINED:
+//   .is('matched_item_id', null) only catches SQL NULL.
+//   If your backend stores "" (empty string) instead of null, these rows won't appear.
+//   The fix below checks BOTH null AND empty string to be safe.
 async function loadLostItemsTable() {
+  const tbody = document.getElementById('lostItemsTableBody');
+  if (!tbody || !window.supabaseClient) return;
+
+  tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
+
   try {
-    if (!window.supabaseClient) {
-      console.warn('Supabase client not available');
-      return;
-    }
-
-    const lostItemsTableBody = document.getElementById('lostItemsTableBody');
-    if (!lostItemsTableBody) {
-      console.warn('lostItemsTableBody element not found');
-      return;
-    }
-
-    console.log('Loading lost items table...');
-    lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
-    console.log('Attempting to fetch from table...');
-
-    // Fetch lost reports that have no matched_item_id
-    const { data, error } = await window.supabaseClient
+    // --- PRIMARY QUERY: matched_item_id IS NULL ---
+    const { data: nullRows, error: nullError } = await window.supabaseClient
       .from('lost_reports')
       .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
       .is('matched_item_id', null)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Database Fetch Error:', error.message);
-      throw error;
-    }
+    if (nullError) throw nullError;
 
-    console.log('Data received from Supabase:', data);
-    console.log('Reports Found:', data ? data.length : 0);
+    // --- SECONDARY QUERY: matched_item_id = '' (empty string fallback) ---
+    const { data: emptyRows, error: emptyError } = await window.supabaseClient
+      .from('lost_reports')
+      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
+      .eq('matched_item_id', '')
+      .order('created_at', { ascending: false });
 
-    if (!data || data.length === 0) {
-      lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No unmatched lost items.</td></tr>';
+    // Merge results (ignore emptyError since column may not allow empty strings)
+    const data = [
+      ...(nullRows || []),
+      ...(emptyError ? [] : (emptyRows || [])),
+    ];
+
+    console.log(`[loadLostItemsTable] Rows fetched (null): ${nullRows?.length ?? 0}`);
+    console.log(`[loadLostItemsTable] Rows fetched (empty string): ${emptyRows?.length ?? 0}`);
+    console.log(`[loadLostItemsTable] Total combined: ${data.length}`);
+    console.table(data);
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No unmatched lost item reports found.</td></tr>';
       return;
     }
 
-    let html = '';
-    for (const report of data) {
-      const reportDate = new Date(report.created_at).toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
+    tbody.innerHTML = data.map(report => {
+      const reportDate = new Date(report.created_at).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
       });
 
-      html += `
+      return `
         <tr>
           <td>${report.student_name || 'N/A'}</td>
-          <td>${report.item_description ? report.item_description.substring(0, 50) + (report.item_description.length > 50 ? '...' : '') : 'N/A'}</td>
+          <td>${report.item_description
+            ? report.item_description.substring(0, 50) + (report.item_description.length > 50 ? '...' : '')
+            : 'N/A'}</td>
           <td>${report.last_location || 'Not specified'}</td>
           <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
           <td>
             <button class="btn btn-small" data-report-id="${report.id}" onclick="handleViewLostItem(this)">View</button>
           </td>
-        </tr>
-      `;
-    }
+        </tr>`;
+    }).join('');
 
-    lostItemsTableBody.innerHTML = html;
-    console.log('Lost items table loaded with', data.length, 'reports');
+    console.log('[loadLostItemsTable] Table rendered successfully.');
   } catch (error) {
-    console.error('Supabase Error:', error.message);
-    const lostItemsTableBody = document.getElementById('lostItemsTableBody');
-    if (lostItemsTableBody) {
-      lostItemsTableBody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
-    }
+    console.error('[loadLostItemsTable] Error:', error);
+    tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
   }
 }
 
-// ========== CLAIM REQUESTS TABLE LOADING ==========
+// ========== CLAIM REQUESTS TABLE ==========
+// FIX: Shows reports where matched_item_id IS NOT NULL (AI has found a match)
+// FIX: Join with items table; added fallback if FK relationship isn't configured in Supabase
 async function loadClaimRequestsTable() {
+  const tbody = document.getElementById('claimRequestsTableBody');
+  if (!tbody || !window.supabaseClient) return;
+
+  tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
+
   try {
-    if (!window.supabaseClient) {
-      console.warn('Supabase client not available');
-      return;
-    }
-
-    const claimRequestsTableBody = document.getElementById('claimRequestsTableBody');
-    if (!claimRequestsTableBody) {
-      console.warn('claimRequestsTableBody element not found');
-      return;
-    }
-
-    console.log('Loading claim requests table...');
-    claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
-    console.log('Attempting to fetch from table...');
-
-    // Fetch pending matched reports and join the matched item for display.
-    const { data, error } = await window.supabaseClient
+    // --- STEP 1: Fetch pending reports that HAVE a matched_item_id ---
+    // Using .not() with 'is' filter for SQL NOT NULL
+    const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('*, items(*)')
+      .select('*')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Database Fetch Error:', error.message);
-      throw error;
+    if (error) throw error;
+
+    console.log(`[loadClaimRequestsTable] Rows fetched: ${reports?.length ?? 0}`);
+    console.table(reports);
+
+    // --- STEP 2: Also check for rows with a non-empty matched_item_id string ---
+    // This guards against backends that store "" instead of null
+    const { data: reportsWithEmptyMatch, error: emptyMatchError } = await window.supabaseClient
+      .from('lost_reports')
+      .select('*')
+      .eq('status', 'pending')
+      .neq('matched_item_id', '')
+      .not('matched_item_id', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (!emptyMatchError) {
+      console.log(`[loadClaimRequestsTable] neq('') filter rows: ${reportsWithEmptyMatch?.length ?? 0}`);
     }
 
-    console.log('Data received from Supabase:', data);
-    console.log('Reports Found:', data ? data.length : 0);
-
-    if (!data || data.length === 0) {
-      claimRequestsTableBody.innerHTML = '<tr><td colspan="5" class="no-data">No claim requests.</td></tr>';
+    if (!reports || reports.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending claim requests found.</td></tr>';
       return;
     }
 
-    let html = '';
-    for (const report of data) {
-      const matchedItem = Array.isArray(report.items) && report.items.length > 0 ? report.items[0] : report.items;
-      let resolvedMatchedItem = matchedItem;
+    // --- STEP 3: For each report, fetch matched item separately (avoids FK dependency) ---
+    const rows = await Promise.all(
+      reports.map(async report => {
+        let matchedItem = null;
 
-      if (!resolvedMatchedItem && report.matched_item_id) {
-        const { data: fallbackItem, error: itemError } = await window.supabaseClient
-          .from('items')
-          .select('id, display_name, image_url')
-          .eq('id', report.matched_item_id)
-          .maybeSingle();
+        if (report.matched_item_id) {
+          const { data: itemData, error: itemError } = await window.supabaseClient
+            .from('items')
+            .select('id, display_name, image_url')
+            .eq('id', report.matched_item_id)
+            .maybeSingle();
 
-        if (itemError) {
-          console.warn('Failed to fetch matched item for claim request:', report.matched_item_id, itemError);
+          if (itemError) {
+            console.warn(`[loadClaimRequestsTable] Could not fetch item ${report.matched_item_id}:`, itemError.message);
+          } else {
+            matchedItem = itemData;
+          }
         }
 
-        resolvedMatchedItem = fallbackItem;
-      }
+        console.log(`[loadClaimRequestsTable] Report ${report.id} → matched item:`, matchedItem);
+        return { report, matchedItem };
+      })
+    );
 
-      const itemPublicUrl = resolvedMatchedItem?.image_url ? getSupabasePublicUrl(resolvedMatchedItem.image_url) : FALLBACK_ITEM_IMAGE;
-      const studentPublicUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+    tbody.innerHTML = rows.map(({ report, matchedItem }) => {
+      const itemPublicUrl = matchedItem?.image_url
+        ? getSupabasePublicUrl(matchedItem.image_url)
+        : FALLBACK_ITEM_IMAGE;
 
-      const itemPhotoHtml = `<img src="${itemPublicUrl}" alt="Item" class="table-thumbnail" onclick="openLightbox('${itemPublicUrl}')" title="Item Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;" onerror="this.onerror=null;this.src='${FALLBACK_ITEM_IMAGE}'">`;
+      const studentPublicUrl = report.ref_photo_url_1
+        ? getSupabasePublicUrl(report.ref_photo_url_1)
+        : '';
 
-      const studentPhotoHtml = studentPublicUrl
-        ? `<img src="${studentPublicUrl}" alt="Reference" class="table-thumbnail" onclick="openLightbox('${studentPublicUrl}')" title="Student Photo" style="cursor: pointer; max-height: 50px; max-width: 50px; border-radius: 4px; margin-right: 5px;">`
-        : '<span class="no-image">-</span>';
-
-      const requestDate = new Date(report.created_at).toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric', 
-        year: 'numeric' 
+      const requestDate = new Date(report.created_at).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
       });
 
-      html += `
+      const itemPhotoHtml = `
+        <img src="${itemPublicUrl}" alt="Item" class="table-thumbnail"
+          onclick="openLightbox('${itemPublicUrl}')"
+          title="Item Photo"
+          style="cursor:pointer;max-height:50px;max-width:50px;border-radius:4px;margin-right:5px;"
+          onerror="this.onerror=null;this.src='${FALLBACK_ITEM_IMAGE}'">`;
+
+      const studentPhotoHtml = studentPublicUrl
+        ? `<img src="${studentPublicUrl}" alt="Reference" class="table-thumbnail"
+             onclick="openLightbox('${studentPublicUrl}')"
+             title="Student Photo"
+             style="cursor:pointer;max-height:50px;max-width:50px;border-radius:4px;margin-right:5px;">`
+        : '<span class="no-image">—</span>';
+
+      return `
         <tr>
-          <td>${resolvedMatchedItem?.display_name || 'N/A'}</td>
+          <td>${matchedItem?.display_name || 'N/A'}</td>
           <td>${report.student_email || 'N/A'}</td>
           <td>${requestDate}</td>
           <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
           <td>
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
               ${itemPhotoHtml}
               ${studentPhotoHtml}
-              <span class="match-score" title="AI Match Score" style="font-weight: bold; color: #D32F2F;">${report.match_score || 0}%</span>
-              <button class="btn btn-small" data-report-id="${report.id}" data-item-id="${resolvedMatchedItem?.id || ''}" data-item-image-url="${itemPublicUrl}" data-student-image-url="${studentPublicUrl || ''}" data-match-score="${report.match_score}" data-student-email="${report.student_email}" onclick="handleVerifyClaim(this)">Verify</button>
+              <span class="match-score" title="AI Match Score" style="font-weight:bold;color:#D32F2F;">${report.match_score ?? 0}%</span>
+              <button class="btn btn-small"
+                data-report-id="${report.id}"
+                data-item-id="${matchedItem?.id || ''}"
+                data-item-image-url="${itemPublicUrl}"
+                data-student-image-url="${studentPublicUrl}"
+                data-match-score="${report.match_score ?? 0}"
+                data-student-email="${report.student_email || ''}"
+                onclick="handleVerifyClaim(this)">Verify</button>
             </div>
           </td>
-        </tr>
-      `;
-    }
+        </tr>`;
+    }).join('');
 
-    claimRequestsTableBody.innerHTML = html;
-    console.log('Claim requests table loaded with', data.length, 'requests');
-    console.log('Claim data:', data);
+    console.log('[loadClaimRequestsTable] Table rendered successfully.');
   } catch (error) {
-    console.error('Supabase Error:', error.message);
-    const claimRequestsTableBody = document.getElementById('claimRequestsTableBody');
-    if (claimRequestsTableBody) {
-      claimRequestsTableBody.innerHTML = '<tr><td colspan="6" class="error">Error loading requests. Please refresh.</td></tr>';
-    }
+    console.error('[loadClaimRequestsTable] Error:', error);
+    tbody.innerHTML = '<tr><td colspan="6" class="error">Error loading requests. Please refresh.</td></tr>';
   }
 }
 
-// ========== DASHBOARD STATS FETCHING ==========
+// ========== DASHBOARD STATS ==========
 async function fetchDashboardStats() {
+  if (!window.supabaseClient) return;
+
   try {
-    if (!window.supabaseClient) {
-      console.warn('Supabase client not available');
-      return;
-    }
+    const [
+      { count: totalItems },
+      { count: pendingReports },
+      { count: matchedReports },
+    ] = await Promise.all([
+      window.supabaseClient.from('items').select('*', { count: 'exact', head: true }),
+      window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'matched'),
+    ]);
 
-    console.log('Fetching dashboard statistics...');
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? 0; };
+    set('totalItems', totalItems);
+    set('pendingReports', pendingReports);
+    set('matchedReports', matchedReports);
 
-    // Fetch total items
-    const { count: totalItems } = await window.supabaseClient
-      .from('items')
-      .select('*', { count: 'exact', head: true });
-
-    // Fetch pending reports
-    const { count: pendingReports } = await window.supabaseClient
-      .from('lost_reports')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
-    // Fetch matched reports
-    const { count: matchedReports } = await window.supabaseClient
-      .from('lost_reports')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'matched');
-
-    // Update UI
-    const totalItemsEl = document.getElementById('totalItems');
-    const pendingReportsEl = document.getElementById('pendingReports');
-    const matchedReportsEl = document.getElementById('matchedReports');
-
-    if (totalItemsEl) totalItemsEl.textContent = totalItems || 0;
-    if (pendingReportsEl) pendingReportsEl.textContent = pendingReports || 0;
-    if (matchedReportsEl) matchedReportsEl.textContent = matchedReports || 0;
-
-    console.log('Stats updated:', { totalItems, pendingReports, matchedReports });
+    console.log('[fetchDashboardStats]', { totalItems, pendingReports, matchedReports });
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
-    // Set defaults on error
-    const totalItemsEl = document.getElementById('totalItems');
-    const pendingReportsEl = document.getElementById('pendingReports');
-    const matchedReportsEl = document.getElementById('matchedReports');
-    if (totalItemsEl) totalItemsEl.textContent = '0';
-    if (pendingReportsEl) pendingReportsEl.textContent = '0';
-    if (matchedReportsEl) matchedReportsEl.textContent = '0';
+    console.error('[fetchDashboardStats] Error:', error);
   }
 }
 
 // ========== VERIFICATION HUB ==========
 async function loadVerificationHub() {
+  if (!window.supabaseClient || !verificationContainer) return;
+
   try {
-    if (!window.supabaseClient) {
-      console.warn('Supabase client not available for verification hub');
-      return;
-    }
-
-    if (!verificationContainer) {
-      console.warn('verificationContainer element not found');
-      return;
-    }
-
-    console.log('Loading verification hub...');
-
-    // Fetch all pending and matched lost reports with their data
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
       .select('*')
@@ -434,581 +377,351 @@ async function loadVerificationHub() {
       return;
     }
 
-    let html = '';
-    
-    for (const report of reports) {
-      // Fetch the matched item if it exists
-      let matchedItem = null;
-      if (report.matched_item_id) {
-        const { data: item } = await window.supabaseClient
-          .from('items')
-          .select('*')
-          .eq('id', report.matched_item_id)
-          .single();
-        matchedItem = item;
-      }
+    const cards = await Promise.all(
+      reports.map(async report => {
+        let matchedItem = null;
+        if (report.matched_item_id) {
+          const { data } = await window.supabaseClient
+            .from('items').select('*').eq('id', report.matched_item_id).single();
+          matchedItem = data;
+        }
 
-      html += `
-        <div class="verification-card">
-          <div class="verification-header">
-            <h3>${report.student_name}</h3>
-            <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
-          </div>
-          <div class="verification-body">
-            <div class="verification-images">
-              <div class="image-section">
-                <h4>Student Reference Photo</h4>
-                ${report.ref_photo_url_1 ? `<img src="${report.ref_photo_url_1}" alt="Reference" onclick="openLightbox('${report.ref_photo_url_1}')">` : '<p class="no-image">No image provided</p>'}
+        const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
+        const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+
+        return `
+          <div class="verification-card">
+            <div class="verification-header">
+              <h3>${report.student_name || 'Unknown'}</h3>
+              <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
+            </div>
+            <div class="verification-body">
+              <div class="verification-images">
+                <div class="image-section">
+                  <h4>Student Reference Photo</h4>
+                  ${refImgUrl ? `<img src="${refImgUrl}" alt="Reference" onclick="openLightbox('${refImgUrl}')">` : '<p class="no-image">No image provided</p>'}
+                </div>
+                <div class="image-section">
+                  <h4>Office Item Image</h4>
+                  ${itemImgUrl ? `<img src="${itemImgUrl}" alt="Item" onclick="openLightbox('${itemImgUrl}')">` : '<p class="no-image">No matched item</p>'}
+                </div>
               </div>
-              <div class="image-section">
-                <h4>Office Item Image</h4>
-                ${matchedItem?.image_url ? `<img src="${matchedItem.image_url}" alt="Item" onclick="openLightbox('${matchedItem.image_url}')">` : '<p class="no-image">No matched item</p>'}
+              <div class="verification-details">
+                <p><strong>Description:</strong> ${report.item_description || 'N/A'}</p>
+                <p><strong>Location:</strong> ${report.last_location || 'Not specified'}</p>
+                <p><strong>Match Score:</strong> <span class="match-score">${report.match_score ?? 0}%</span></p>
+                ${matchedItem ? `<p><strong>Matched Item:</strong> ${matchedItem.display_name || matchedItem.name || 'N/A'}</p>` : ''}
               </div>
             </div>
-            <div class="verification-details">
-              <p><strong>Item Description:</strong> ${report.item_description}</p>
-              <p><strong>Location:</strong> ${report.last_location || 'Not specified'}</p>
-              <p><strong>Match Score:</strong> <span class="match-score">${report.match_score || 0}%</span></p>
-              ${matchedItem ? `<p><strong>Matched Item:</strong> ${matchedItem.name}</p>` : ''}
+            <div class="verification-actions">
+              <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}')">Approve Match</button>
+              <button class="btn btn-danger" onclick="rejectMatch('${report.id}')">Reject Match</button>
             </div>
-          </div>
-          <div class="verification-actions">
-            <button class="btn btn-success" onclick="approveMatch(${report.id}, ${report.matched_item_id || 'null'})">Approve Match</button>
-            <button class="btn btn-danger" onclick="rejectMatch(${report.id})">Reject Match</button>
-          </div>
-        </div>
-      `;
-    }
+          </div>`;
+      })
+    );
 
-    verificationContainer.innerHTML = html;
-    console.log('Verification hub loaded with', reports.length, 'reports');
+    verificationContainer.innerHTML = cards.join('');
   } catch (error) {
-    console.error('Error loading verification hub:', error);
-    if (verificationContainer) {
-      verificationContainer.innerHTML = '<p class="error">Error loading reports. Please refresh the page.</p>';
-    }
+    console.error('[loadVerificationHub] Error:', error);
+    verificationContainer.innerHTML = '<p class="error">Error loading reports. Please refresh.</p>';
   }
 }
 
-// ========== MATCH APPROVAL/REJECTION ==========
+// ========== MATCH APPROVAL / REJECTION ==========
 async function approveMatch(reportId, itemId) {
+  if (!window.supabaseClient) return;
   try {
-    if (!window.supabaseClient) {
-      console.error('Supabase client not available');
-      return;
-    }
-
-    console.log('Approving match:', reportId);
-
-    // Update lost report status to matched
     const { error: reportError } = await window.supabaseClient
-      .from('lost_reports')
-      .update({ status: 'approved' })
-      .eq('id', reportId);
-
+      .from('lost_reports').update({ status: 'approved' }).eq('id', reportId);
     if (reportError) throw reportError;
 
-    // Update item status if it exists
     if (itemId) {
       const { error: itemError } = await window.supabaseClient
-        .from('items')
-        .update({ status: 'matched' })
-        .eq('id', itemId);
-
+        .from('items').update({ status: 'matched' }).eq('id', itemId);
       if (itemError) throw itemError;
     }
 
-    console.log('Match approved successfully');
     alert('Match approved successfully!');
-    
-    // Reload verification hub
-    await loadVerificationHub();
-    await fetchDashboardStats();
+    await Promise.all([loadVerificationHub(), fetchDashboardStats()]);
   } catch (error) {
-    console.error('Error approving match:', error);
+    console.error('[approveMatch] Error:', error);
     alert('Error approving match: ' + error.message);
   }
 }
 
 async function rejectMatch(reportId) {
+  if (!window.supabaseClient) return;
   try {
-    if (!window.supabaseClient) {
-      console.error('Supabase client not available');
-      return;
-    }
-
-    console.log('Rejecting match:', reportId);
-
-    // Update lost report status to rejected
     const { error } = await window.supabaseClient
-      .from('lost_reports')
-      .update({ status: 'rejected' })
-      .eq('id', reportId);
-
+      .from('lost_reports').update({ status: 'rejected' }).eq('id', reportId);
     if (error) throw error;
 
-    console.log('Match rejected successfully');
     alert('Match rejected successfully!');
-    
-    // Reload verification hub
-    await loadVerificationHub();
-    await fetchDashboardStats();
+    await Promise.all([loadVerificationHub(), fetchDashboardStats()]);
   } catch (error) {
-    console.error('Error rejecting match:', error);
+    console.error('[rejectMatch] Error:', error);
     alert('Error rejecting match: ' + error.message);
+  }
+}
+
+// ========== APPROVE / REJECT CLAIM ==========
+async function approveClaim(reportId, itemId) {
+  if (!window.supabaseClient) return;
+  try {
+    const { error: r } = await window.supabaseClient
+      .from('lost_reports').update({ status: 'matched' }).eq('id', reportId);
+    if (r) throw r;
+
+    const { error: i } = await window.supabaseClient
+      .from('items').update({ status: 'claimed' }).eq('id', itemId);
+    if (i) throw i;
+
+    alert('✅ Claim approved! Item marked as CLAIMED.');
+    closeClaimVerificationModal();
+    await Promise.all([loadItemsTable(), loadClaimRequestsTable(), loadLostItemsTable(), fetchDashboardStats(), loadVerificationHub()]);
+  } catch (error) {
+    console.error('[approveClaim] Error:', error);
+    alert('Failed to approve claim: ' + error.message);
+  }
+}
+
+async function rejectClaim(reportId) {
+  if (!window.supabaseClient) return;
+  try {
+    const { error } = await window.supabaseClient
+      .from('lost_reports').update({ matched_item_id: null, status: 'pending' }).eq('id', reportId);
+    if (error) throw error;
+
+    alert('❌ Claim rejected! Report moved back to Lost Items.');
+    closeClaimVerificationModal();
+    await Promise.all([loadClaimRequestsTable(), loadLostItemsTable()]);
+  } catch (error) {
+    console.error('[rejectClaim] Error:', error);
+    alert('Failed to reject claim: ' + error.message);
   }
 }
 
 // ========== SUPABASE URL HELPER ==========
 function getSupabasePublicUrl(imagePath) {
   if (!imagePath) return '';
-  
-  // If it's already a full URL, return as-is
-  if (imagePath.startsWith('http')) {
-    return imagePath;
-  }
-  
-  // Extract project ID from SUPABASE_URL
-  // Format: https://[PROJECT_ID].supabase.co
+  if (imagePath.startsWith('http')) return imagePath;
+
   const supabaseUrl = window.SUPABASE_URL || '';
   const match = supabaseUrl.match(/https:\/\/([a-z0-9-]+)\.supabase\.co/);
   const projectId = match ? match[1] : 'unknown-project';
-  
-  // Build public URL for items bucket
+
   return `https://${projectId}.supabase.co/storage/v1/object/public/items/${imagePath}`;
 }
 
 // ========== ITEM ACTION MODAL ==========
-let currentItemId = null;
-
 function handleViewClick(button) {
-  const itemId = button.dataset.itemId;
-  const imageUrl = button.dataset.imageUrl;
-  const itemName = button.dataset.itemName;
-  const aiDesc = button.dataset.itemDesc;
-  const status = button.dataset.itemStatus;
-  openItemActionModal(itemId, imageUrl, itemName, aiDesc, status);
+  openItemActionModal(
+    button.dataset.itemId,
+    button.dataset.imageUrl,
+    button.dataset.itemName,
+    button.dataset.itemDesc,
+    button.dataset.itemStatus
+  );
 }
 
 function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentStatus) {
-  try {
-    currentItemId = itemId;
-    const modal = document.getElementById('itemActionModal');
-    const modalTitle = document.getElementById('modalTitle');
-    const modalItemStatus = document.getElementById('modalItemStatus');
-    const modalItemImage = document.getElementById('modalItemImage');
-    const modalItemName = document.getElementById('modalItemName');
-    const modalItemDescription = document.getElementById('modalItemDescription');
-    const statusDropdown = document.getElementById('itemStatusDropdown');
+  currentItemId = itemId;
+  const modal = document.getElementById('itemActionModal');
+  if (!modal) return;
 
-    if (!modal) {
-      console.warn('itemActionModal element not found');
-      return;
-    }
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el[id === 'modalItemImage' ? 'src' : 'value'] = val || ''; };
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
 
-    // Populate modal fields
-    if (modalTitle) modalTitle.textContent = 'Review Item: ' + itemName;
-    if (modalItemStatus) modalItemStatus.textContent = 'Status: ' + (currentStatus || 'pending').toUpperCase();
-    if (modalItemImage) modalItemImage.src = imageUrl || '';
-    if (modalItemName) modalItemName.value = itemName || '';
-    if (modalItemDescription) modalItemDescription.value = aiDescription || '';
-    
-    // Set current status in dropdown
-    if (statusDropdown) {
-      statusDropdown.value = currentStatus || 'pending';
-    }
+  setText('modalTitle', 'Review Item: ' + itemName);
+  setText('modalItemStatus', 'Status: ' + (currentStatus || 'pending').toUpperCase());
+  document.getElementById('modalItemImage').src = imageUrl || '';
+  set('modalItemName', itemName);
+  set('modalItemDescription', aiDescription);
 
-    // Show modal
-    modal.style.display = 'flex';
-    console.log('Item action modal opened for item ID:', itemId);
-  } catch (error) {
-    console.error('Error opening item action modal:', error);
-  }
+  const dropdown = document.getElementById('itemStatusDropdown');
+  if (dropdown) dropdown.value = currentStatus || 'pending';
+
+  modal.style.display = 'flex';
 }
 
 function closeItemActionModal() {
   const modal = document.getElementById('itemActionModal');
-  if (modal) {
-    modal.style.display = 'none';
-  }
+  if (modal) modal.style.display = 'none';
   currentItemId = null;
 }
 
 async function updateItemStatus() {
+  if (!currentItemId || !window.supabaseClient) return;
+
+  const dropdown = document.getElementById('itemStatusDropdown');
+  const newStatus = dropdown?.value || 'pending';
+
   try {
-    if (!currentItemId) {
-      alert('No item selected');
-      return;
-    }
-
-    if (!window.supabaseClient) {
-      console.error('Supabase client not available');
-      return;
-    }
-
-    const statusDropdown = document.getElementById('itemStatusDropdown');
-    const newStatus = statusDropdown?.value || 'pending';
-
-    console.log('Updating item', currentItemId, 'to status:', newStatus);
-
     const { error } = await window.supabaseClient
-      .from('items')
-      .update({ status: newStatus })
-      .eq('id', currentItemId);
-
+      .from('items').update({ status: newStatus }).eq('id', currentItemId);
     if (error) throw error;
 
-    console.log('Item status updated successfully');
     alert('Item status updated to ' + newStatus.toUpperCase());
-    
-    // Refresh the items table
     await loadItemsTable();
     closeItemActionModal();
   } catch (error) {
-    console.error('Error updating item status:', error);
+    console.error('[updateItemStatus] Error:', error);
     alert('Error updating item: ' + error.message);
-  }
-}
-
-// ========== LIGHTBOX ==========
-function openLightbox(imageSrc) {
-  const lightbox = document.getElementById('lightbox');
-  const lightboxImg = document.getElementById('lightbox-img');
-  if (lightbox && lightboxImg) {
-    lightboxImg.src = imageSrc;
-    lightbox.style.display = 'flex';
-  }
-}
-
-function closeLightbox() {
-  const lightbox = document.getElementById('lightbox');
-  if (lightbox) {
-    lightbox.style.display = 'none';
-  }
-}
-
-// ========== PROFILE LOADING ==========
-async function loadUserProfile() {
-  try {
-    if (!window.supabaseClient) {
-      console.warn('Supabase client not available for profile loading');
-      return;
-    }
-
-    const { data } = await window.supabaseClient.auth.getSession();
-    const session = data?.session;
-    
-    if (!session?.user?.id) {
-      console.log('No active session for profile loading');
-      return;
-    }
-
-    const userNameEl = document.getElementById('userName');
-    const userEmailEl = document.getElementById('userEmail');
-    const userRoleEl = document.getElementById('userRole');
-
-    if (userNameEl) {
-      userNameEl.textContent = session.user.user_metadata?.full_name || session.user.email || 'Admin';
-    }
-    if (userEmailEl) {
-      userEmailEl.textContent = session.user.email || '';
-    }
-    if (userRoleEl) {
-      userRoleEl.textContent = 'Administrator';
-    }
-
-    // Fetch profile using the getProfile function from auth.js
-    if (typeof getProfile !== 'function') {
-      console.warn('getProfile function not available');
-      return;
-    }
-
-    const profile = await getProfile(session.user.id);
-    
-    // Update UI with profile data
-    if (userNameEl) {
-      userNameEl.textContent = profile?.full_name || userNameEl.textContent || 'Admin';
-    }
-    if (userEmailEl) {
-      userEmailEl.textContent = profile?.email || userEmailEl.textContent || session.user.email || '';
-    }
-    if (userRoleEl) {
-      userRoleEl.textContent = 'Administrator';
-    }
-
-    console.log('Admin profile loaded successfully');
-  } catch (error) {
-    console.error('Error loading profile:', error);
-  }
-}
-
-// ========== LOGOUT HANDLER ==========
-function handleLogout() {
-  try {
-    console.log('Logout button clicked');
-    
-    // Call the logout function from auth.js
-    if (typeof logout === 'function') {
-      logout();
-    } else if (typeof window.logout === 'function') {
-      window.logout();
-    } else {
-      console.error('Logout function not available');
-      window.location.href = '/login.html';
-    }
-  } catch (error) {
-    console.error('Error during logout:', error);
-    window.location.href = '/login.html';
-  }
-}
-
-// ========== SIDEBAR NAVIGATION ==========
-function toggleSidebar() {
-  if (sidebar) {
-    sidebar.classList.toggle('active');
-  }
-  if (sidebarOverlay) {
-    sidebarOverlay.classList.toggle('active');
-  }
-}
-
-function closeSidebar() {
-  if (sidebar) {
-    sidebar.classList.remove('active');
-  }
-  if (sidebarOverlay) {
-    sidebarOverlay.classList.remove('active');
-  }
-}
-
-// ========== PAGE INITIALIZATION ==========
-function initPage() {
-  try {
-    // Logout button
-    if (logoutBtn) {
-      logoutBtn.addEventListener('click', handleLogout);
-      console.log('Logout button listener attached');
-    } else {
-      console.warn('logoutBtn element not found');
-    }
-
-    // Hamburger menu
-    if (hamburgerBtn) {
-      hamburgerBtn.addEventListener('click', toggleSidebar);
-    }
-
-    // Sidebar close button
-    if (sidebarClose) {
-      sidebarClose.addEventListener('click', closeSidebar);
-    }
-
-    // Sidebar overlay
-    if (sidebarOverlay) {
-      sidebarOverlay.addEventListener('click', closeSidebar);
-    }
-
-    // Refresh button
-    if (refreshBtn) {
-      refreshBtn.addEventListener('click', async () => {
-        await fetchDashboardStats();
-        await loadVerificationHub();
-      });
-    } else {
-      console.warn('refreshBtn element not found');
-    }
-
-    // Close lightbox on click
-    const lightbox = document.getElementById('lightbox');
-    if (lightbox) {
-      lightbox.addEventListener('click', (e) => {
-        if (e.target === lightbox) {
-          closeLightbox();
-        }
-      });
-    }
-
-    console.log('Page initialization completed');
-  } catch (error) {
-    console.error('Error during page initialization:', error);
-  }
-}
-
-// ========== DOM CONTENT LOADED ==========
-document.addEventListener('DOMContentLoaded', async function() {
-  console.log('=== Admin Dashboard DOMContentLoaded triggered ===');
-
-  try {
-    // Initialize all DOM element references
-    logoutBtn = document.getElementById('logoutBtn');
-    hamburgerBtn = document.getElementById('hamburgerBtn');
-    sidebarOverlay = document.getElementById('sidebarOverlay');
-    sidebar = document.getElementById('sidebar');
-    sidebarClose = document.getElementById('sidebarClose');
-    refreshBtn = document.getElementById('refreshBtn');
-    verificationContainer = document.getElementById('verificationContainer');
-
-    console.log('DOM elements initialized');
-
-    // Initialize authentication and navigation
-    if (typeof checkAuthAndRedirect === 'function') {
-      await checkAuthAndRedirect();
-    } else {
-      console.warn('checkAuthAndRedirect function not available from auth.js');
-    }
-
-    // Load user profile
-    await loadUserProfile();
-
-    // Initialize page listeners and event handlers
-    initPage();
-
-    // Load initial dashboard stats
-    await fetchDashboardStats();
-
-    // Load verification hub
-    await loadVerificationHub();
-
-    // Load Item Management table by default
-    await loadItemsTable();
-
-    console.log('=== Admin Dashboard Initialization complete ===');
-
-  } catch (error) {
-    console.error('Fatal error during DOMContentLoaded:', error);
-  }
-});
-
-// ========== HANDLE LOST ITEM VIEW ==========
-function handleViewLostItem(button) {
-  const reportId = button.dataset.reportId;
-  console.log('Viewing lost item report:', reportId);
-  alert("Report ID: " + reportId + ". Full report details coming soon.");
-}
-
-// ========== HANDLE CLAIM VERIFICATION ==========
-function handleVerifyClaim(button) {
-  const reportId = button.dataset.reportId;
-  const itemId = button.dataset.itemId;
-  const matchScore = button.dataset.matchScore;
-  const studentEmail = button.dataset.studentEmail;
-  const itemImageUrl = button.dataset.itemImageUrl;
-  const studentImageUrl = button.dataset.studentImageUrl;
-  
-  console.log('Verifying claim:', { reportId, itemId, matchScore, studentEmail, itemImageUrl, studentImageUrl });
-  
-  // Open claim verification modal
-  openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl, studentImageUrl);
-}
-
-// ========== APPROVE CLAIM ==========
-async function approveClaim(reportId, itemId) {
-  try {
-    if (!window.supabaseClient) throw new Error('Supabase client not available');
-    
-    // Update lost_reports status to 'matched'
-    const { error: reportError } = await window.supabaseClient
-      .from('lost_reports')
-      .update({ status: 'matched' })
-      .eq('id', reportId);
-    
-    if (reportError) throw reportError;
-    
-    // Update items status to 'claimed'
-    const { error: itemError } = await window.supabaseClient
-      .from('items')
-      .update({ status: 'claimed' })
-      .eq('id', itemId);
-    
-    if (itemError) throw itemError;
-    
-    console.log('Claim approved successfully');
-    alert('? Claim approved! Item marked as CLAIMED.');
-    closeClaimVerificationModal();
-    loadItemsTable();
-    loadClaimRequestsTable();
-    loadLostItemsTable();
-    fetchDashboardStats();
-    loadVerificationHub();
-  } catch (error) {
-    console.error('Error approving claim:', error);
-    alert('Failed to approve claim: ' + error.message);
-  }
-}
-
-// ========== REJECT CLAIM ==========
-async function rejectClaim(reportId) {
-  try {
-    if (!window.supabaseClient) throw new Error('Supabase client not available');
-    
-    // Clear matched_item_id and set status to 'pending'
-    const { error } = await window.supabaseClient
-      .from('lost_reports')
-      .update({ matched_item_id: null, status: 'pending' })
-      .eq('id', reportId);
-    
-    if (error) throw error;
-    
-    console.log('Claim rejected successfully');
-    alert('? Claim rejected! Report moved back to Lost Items.');
-    closeClaimVerificationModal();
-    loadClaimRequestsTable();
-    loadLostItemsTable();
-  } catch (error) {
-    console.error('Error rejecting claim:', error);
-    alert('Failed to reject claim: ' + error.message);
   }
 }
 
 // ========== CLAIM VERIFICATION MODAL ==========
 function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl = '', studentImageUrl = '') {
   const modal = document.getElementById('claimVerificationModal');
-  if (!modal) {
-    console.warn('claimVerificationModal element not found');
-    return;
-  }
-  
-  // Store data for approval/rejection
+  if (!modal) return;
+
   modal.dataset.reportId = reportId;
   modal.dataset.itemId = itemId;
-  
-  // Update modal title
+
   const title = document.getElementById('claimVerificationTitle');
-  if (title) {
-    title.textContent = "Verify Claim - Match Score: " + matchScore + "%";
-  }
-  
-  // Update student email
+  if (title) title.textContent = `Verify Claim — Match Score: ${matchScore}%`;
+
   const emailDisplay = document.getElementById('claimStudentEmail');
-  if (emailDisplay) {
-    emailDisplay.textContent = studentEmail || 'N/A';
-  }
+  if (emailDisplay) emailDisplay.textContent = studentEmail || 'N/A';
 
   const itemImageEl = document.getElementById('claimItemImage');
   if (itemImageEl) {
     itemImageEl.src = itemImageUrl || FALLBACK_ITEM_IMAGE;
-    itemImageEl.onerror = () => {
-      itemImageEl.onerror = null;
-      itemImageEl.src = FALLBACK_ITEM_IMAGE;
-    };
+    itemImageEl.onerror = () => { itemImageEl.onerror = null; itemImageEl.src = FALLBACK_ITEM_IMAGE; };
   }
 
   const studentImageEl = document.getElementById('claimStudentImage');
   if (studentImageEl) {
     studentImageEl.src = studentImageUrl || FALLBACK_ITEM_IMAGE;
-    studentImageEl.onerror = () => {
-      studentImageEl.onerror = null;
-      studentImageEl.src = FALLBACK_ITEM_IMAGE;
-    };
+    studentImageEl.onerror = () => { studentImageEl.onerror = null; studentImageEl.src = FALLBACK_ITEM_IMAGE; };
   }
-  
-  // Show modal
+
   modal.style.display = 'flex';
 }
 
 function closeClaimVerificationModal() {
   const modal = document.getElementById('claimVerificationModal');
-  if (modal) {
-    modal.style.display = 'none';
+  if (modal) modal.style.display = 'none';
+}
+
+// ========== LIGHTBOX ==========
+function openLightbox(imageSrc) {
+  const lightbox = document.getElementById('lightbox');
+  const img = document.getElementById('lightbox-img');
+  if (lightbox && img) { img.src = imageSrc; lightbox.style.display = 'flex'; }
+}
+
+function closeLightbox() {
+  const lightbox = document.getElementById('lightbox');
+  if (lightbox) lightbox.style.display = 'none';
+}
+
+// ========== PROFILE LOADING ==========
+async function loadUserProfile() {
+  if (!window.supabaseClient) return;
+
+  try {
+    const { data } = await window.supabaseClient.auth.getSession();
+    const session = data?.session;
+    if (!session?.user?.id) return;
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
+    set('userName', session.user.user_metadata?.full_name || session.user.email || 'Admin');
+    set('userEmail', session.user.email || '');
+    set('userRole', 'Administrator');
+
+    if (typeof getProfile === 'function') {
+      const profile = await getProfile(session.user.id);
+      if (profile) {
+        set('userName', profile.full_name || session.user.email || 'Admin');
+        set('userEmail', profile.email || session.user.email || '');
+      }
+    }
+  } catch (error) {
+    console.error('[loadUserProfile] Error:', error);
   }
 }
 
+// ========== LOGOUT ==========
+function handleLogout() {
+  try {
+    if (typeof logout === 'function') logout();
+    else if (typeof window.logout === 'function') window.logout();
+    else window.location.href = '/login.html';
+  } catch (error) {
+    console.error('[handleLogout] Error:', error);
+    window.location.href = '/login.html';
+  }
+}
+
+// ========== SIDEBAR ==========
+function toggleSidebar() {
+  sidebar?.classList.toggle('active');
+  sidebarOverlay?.classList.toggle('active');
+}
+
+function closeSidebar() {
+  sidebar?.classList.remove('active');
+  sidebarOverlay?.classList.remove('active');
+}
+
+// ========== PAGE INIT ==========
+function initPage() {
+  logoutBtn?.addEventListener('click', handleLogout);
+  hamburgerBtn?.addEventListener('click', toggleSidebar);
+  sidebarClose?.addEventListener('click', closeSidebar);
+  sidebarOverlay?.addEventListener('click', closeSidebar);
+  refreshBtn?.addEventListener('click', async () => {
+    await fetchDashboardStats();
+    await loadVerificationHub();
+  });
+
+  const lightbox = document.getElementById('lightbox');
+  lightbox?.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+}
+
+// ========== DOM CONTENT LOADED ==========
+document.addEventListener('DOMContentLoaded', async () => {
+  console.log('=== Admin Dashboard DOMContentLoaded ===');
+
+  try {
+    logoutBtn           = document.getElementById('logoutBtn');
+    hamburgerBtn        = document.getElementById('hamburgerBtn');
+    sidebarOverlay      = document.getElementById('sidebarOverlay');
+    sidebar             = document.getElementById('sidebar');
+    sidebarClose        = document.getElementById('sidebarClose');
+    refreshBtn          = document.getElementById('refreshBtn');
+    verificationContainer = document.getElementById('verificationContainer');
+
+    if (typeof checkAuthAndRedirect === 'function') await checkAuthAndRedirect();
+    await loadUserProfile();
+    initPage();
+    await fetchDashboardStats();
+    await loadVerificationHub();
+    await loadItemsTable();
+
+    console.log('=== Admin Dashboard Initialization Complete ===');
+  } catch (error) {
+    console.error('[DOMContentLoaded] Fatal error:', error);
+  }
+});
+
+// ========== LOST ITEM VIEW (placeholder) ==========
+function handleViewLostItem(button) {
+  const reportId = button.dataset.reportId;
+  console.log('Viewing lost item report:', reportId);
+  alert(`Report ID: ${reportId}\nFull report detail modal — coming soon.`);
+}
+
+// ========== CLAIM VERIFY HANDLER ==========
+function handleVerifyClaim(button) {
+  openClaimVerificationModal(
+    button.dataset.reportId,
+    button.dataset.itemId,
+    button.dataset.matchScore,
+    button.dataset.studentEmail,
+    button.dataset.itemImageUrl,
+    button.dataset.studentImageUrl
+  );
+}
