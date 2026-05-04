@@ -13,6 +13,57 @@ let currentSection = 'dashboard';
 let currentStatusFilter = 'all';
 let currentItemId = null;
 
+function showAdminToast(message, type = 'success') {
+  const toast = document.createElement('div');
+  toast.textContent = message;
+  toast.style.position = 'fixed';
+  toast.style.right = '20px';
+  toast.style.bottom = '20px';
+  toast.style.zIndex = '2000';
+  toast.style.padding = '12px 16px';
+  toast.style.borderRadius = '10px';
+  toast.style.color = '#fff';
+  toast.style.fontWeight = '600';
+  toast.style.boxShadow = '0 8px 22px rgba(0, 0, 0, 0.2)';
+  toast.style.background = type === 'error' ? '#dc3545' : '#28a745';
+  toast.style.opacity = '0';
+  toast.style.transform = 'translateY(8px)';
+  toast.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+
+  document.body.appendChild(toast);
+
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+    setTimeout(() => toast.remove(), 220);
+  }, 2400);
+}
+
+function setVerificationActionLoading(buttonEl, isLoading, loadingText = '') {
+  if (!buttonEl) return;
+
+  const actionContainer = buttonEl.closest('.verification-actions');
+  const buttons = actionContainer ? actionContainer.querySelectorAll('button') : [buttonEl];
+
+  buttons.forEach(btn => {
+    if (!btn.dataset.originalText) btn.dataset.originalText = btn.innerHTML;
+    btn.disabled = isLoading;
+  });
+
+  if (isLoading) {
+    buttonEl.innerHTML = loadingText;
+  } else {
+    buttons.forEach(btn => {
+      if (btn.dataset.originalText) btn.innerHTML = btn.dataset.originalText;
+    });
+  }
+}
+
 // DOM element references (populated on DOMContentLoaded)
 let logoutBtn, hamburgerBtn, sidebarOverlay, sidebar, sidebarClose, refreshBtn, verificationContainer;
 
@@ -476,8 +527,8 @@ async function loadVerificationHub() {
               </div>
             </div>
             <div class="verification-actions">
-              <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}')">Approve Match</button>
-              <button class="btn btn-danger" onclick="rejectMatch('${report.id}')">Reject Match</button>
+              <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
+              <button class="btn btn-danger" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
             </div>
           </div>`;
       })
@@ -491,27 +542,75 @@ async function loadVerificationHub() {
 }
 
 // ========== MATCH APPROVAL / REJECTION ==========
-async function approveMatch(reportId, itemId) {
+async function approveMatch(reportId, itemId, triggerButton = null) {
   if (!window.supabaseClient) return;
+
+  const resolvedItemId = itemId || await resolveMatchedItemId(reportId);
+  if (!resolvedItemId) {
+    showAdminToast('Unable to approve: matched item not found.', 'error');
+    return;
+  }
+
   try {
-    await commitApprovedMatch(reportId, itemId);
-    alert('Match approved successfully!');
-    await refreshMatchViews();
+    setVerificationActionLoading(triggerButton, true, 'Approving...');
+
+    const [reportUpdate, itemUpdate] = await Promise.all([
+      window.supabaseClient
+        .from('lost_reports')
+        .update({ status: 'matched' })
+        .eq('id', reportId),
+      window.supabaseClient
+        .from('items')
+        .update({ status: 'claimed' })
+        .eq('id', resolvedItemId),
+    ]);
+
+    if (reportUpdate.error) throw reportUpdate.error;
+    if (itemUpdate.error) throw itemUpdate.error;
+
+    await Promise.all([
+      loadVerificationHub(),
+      loadClaimRequestsTable(),
+      loadItemsTable(),
+      fetchDashboardStats(),
+    ]);
+
+    showAdminToast('Match Approved! Item marked as claimed');
   } catch (error) {
     console.error('[approveMatch] Error:', error);
-    alert('Error approving match: ' + error.message);
+    showAdminToast('Error approving match: ' + error.message, 'error');
+  } finally {
+    setVerificationActionLoading(triggerButton, false);
   }
 }
 
-async function rejectMatch(reportId) {
+async function rejectMatch(reportId, triggerButton = null) {
   if (!window.supabaseClient) return;
+
   try {
-    await commitRejectedMatch(reportId);
-    alert('Match rejected successfully!');
-    await refreshMatchViews();
+    setVerificationActionLoading(triggerButton, true, 'Rejecting...');
+
+    const { error } = await window.supabaseClient
+      .from('lost_reports')
+      .update({ matched_item_id: null, match_score: 0 })
+      .eq('id', reportId);
+
+    if (error) throw error;
+
+    await Promise.all([
+      loadVerificationHub(),
+      loadClaimRequestsTable(),
+      loadItemsTable(),
+      loadLostItemsTable(),
+      fetchDashboardStats(),
+    ]);
+
+    showAdminToast('Match Rejected! Report moved to Lost Items');
   } catch (error) {
     console.error('[rejectMatch] Error:', error);
-    alert('Error rejecting match: ' + error.message);
+    showAdminToast('Error rejecting match: ' + error.message, 'error');
+  } finally {
+    setVerificationActionLoading(triggerButton, false);
   }
 }
 
@@ -557,7 +656,7 @@ async function commitApprovedMatch(reportId, itemId) {
 
 async function commitRejectedMatch(reportId) {
   const { error } = await window.supabaseClient
-    .from('lost_reports').update({ matched_item_id: null, status: 'pending' }).eq('id', reportId);
+    .from('lost_reports').update({ matched_item_id: null, match_score: 0 }).eq('id', reportId);
 
   if (error) throw error;
 }
