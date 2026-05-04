@@ -652,6 +652,37 @@ async function updateItemStatus() {
   }
 }
 
+async function deleteItem() {
+  if (!currentItemId || !window.supabaseClient) return;
+
+  const confirmed = confirm('Are you sure you want to permanently delete this item?');
+  if (!confirmed) return;
+
+  const deleteBtn = document.getElementById('modalDeleteBtn');
+  if (deleteBtn) {
+    deleteBtn.disabled = true;
+    deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Deleting...';
+  }
+
+  try {
+    const { error } = await window.supabaseClient
+      .from('items').delete().eq('id', currentItemId);
+    if (error) throw error;
+
+    alert('✅ Item deleted successfully!');
+    closeItemActionModal();
+    await loadItemsTable();
+  } catch (error) {
+    console.error('[deleteItem] Error:', error);
+    alert('Error deleting item: ' + error.message);
+    
+    if (deleteBtn) {
+      deleteBtn.disabled = false;
+      deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Delete Item';
+    }
+  }
+}
+
 // ========== CLAIM VERIFICATION MODAL ==========
 function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl = '', studentImageUrl = '') {
   const modal = document.getElementById('claimVerificationModal');

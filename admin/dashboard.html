@@ -234,9 +234,12 @@
           </div>
         </div>
       </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="closeItemActionModal()">Cancel</button>
-        <button class="btn btn-success" id="modalUpdateBtn" onclick="updateItemStatus()">Update Status</button>
+      <div class="modal-actions" style="justify-content: space-between;">
+        <button class="btn btn-danger" id="modalDeleteBtn" onclick="deleteItem()"><i class="fas fa-trash"></i> Delete Item</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" onclick="closeItemActionModal()">Cancel</button>
+          <button class="btn btn-success" id="modalUpdateBtn" onclick="updateItemStatus()">Update Status</button>
+        </div>
       </div>
     </div>
   </div>
