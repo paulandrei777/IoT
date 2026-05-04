@@ -137,11 +137,8 @@ async function loadItemsTable() {
 }
 
 // ========== LOST ITEMS TABLE ==========
-// FIX: Shows reports where matched_item_id IS NULL (unmatched/pending reports)
-// ROOT CAUSE EXPLAINED:
-//   .is('matched_item_id', null) only catches SQL NULL.
-//   If your backend stores "" (empty string) instead of null, these rows won't appear.
-//   The fix below checks BOTH null AND empty string to be safe.
+// Shows reports where matched_item_id IS NULL (no AI match yet)
+// NOTE: matched_item_id is a UUID column — never compare it to "" (causes 400 Bad Request)
 async function loadLostItemsTable() {
   const tbody = document.getElementById('lostItemsTableBody');
   if (!tbody || !window.supabaseClient) return;
@@ -149,31 +146,15 @@ async function loadLostItemsTable() {
   tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
 
   try {
-    // --- PRIMARY QUERY: matched_item_id IS NULL ---
-    const { data: nullRows, error: nullError } = await window.supabaseClient
+    const { data, error } = await window.supabaseClient
       .from('lost_reports')
       .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
       .is('matched_item_id', null)
       .order('created_at', { ascending: false });
 
-    if (nullError) throw nullError;
+    if (error) throw error;
 
-    // --- SECONDARY QUERY: matched_item_id = '' (empty string fallback) ---
-    const { data: emptyRows, error: emptyError } = await window.supabaseClient
-      .from('lost_reports')
-      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
-      .eq('matched_item_id', '')
-      .order('created_at', { ascending: false });
-
-    // Merge results (ignore emptyError since column may not allow empty strings)
-    const data = [
-      ...(nullRows || []),
-      ...(emptyError ? [] : (emptyRows || [])),
-    ];
-
-    console.log(`[loadLostItemsTable] Rows fetched (null): ${nullRows?.length ?? 0}`);
-    console.log(`[loadLostItemsTable] Rows fetched (empty string): ${emptyRows?.length ?? 0}`);
-    console.log(`[loadLostItemsTable] Total combined: ${data.length}`);
+    console.log(`[loadLostItemsTable] Rows fetched: ${data?.length ?? 0}`);
     console.table(data);
 
     if (data.length === 0) {
@@ -230,20 +211,6 @@ async function loadClaimRequestsTable() {
 
     console.log(`[loadClaimRequestsTable] Rows fetched: ${reports?.length ?? 0}`);
     console.table(reports);
-
-    // --- STEP 2: Also check for rows with a non-empty matched_item_id string ---
-    // This guards against backends that store "" instead of null
-    const { data: reportsWithEmptyMatch, error: emptyMatchError } = await window.supabaseClient
-      .from('lost_reports')
-      .select('*')
-      .eq('status', 'pending')
-      .neq('matched_item_id', '')
-      .not('matched_item_id', 'is', null)
-      .order('created_at', { ascending: false });
-
-    if (!emptyMatchError) {
-      console.log(`[loadClaimRequestsTable] neq('') filter rows: ${reportsWithEmptyMatch?.length ?? 0}`);
-    }
 
     if (!reports || reports.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending claim requests found.</td></tr>';
