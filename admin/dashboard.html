@@ -50,6 +50,10 @@
           <i class="fas fa-hands-helping"></i>
           <span>Claim Requests</span>
         </a>
+        <a href="#" class="nav-link" onclick="showSection('resolvedTransactions')">
+          <i class="fas fa-archive"></i>
+          <span>Resolved Transactions</span>
+        </a>
         <a href="/admin/auditLogs.html" class="nav-link">
           <i class="fas fa-history"></i>
           <span>Audit Logs</span>
@@ -104,6 +108,28 @@
           </div>
           <h3>Resolved Matches</h3>
           <p class="value" id="matchedReports">0</p>
+        </div>
+      </section>
+
+      <!-- Resolved Transactions Section -->
+      <section class="admin-section" id="resolvedTransactionsSection" style="display: none;">
+        <h2>Resolved Transactions</h2>
+        <p class="section-description">All resolved claims and completed transactions.</p>
+        <div class="table-responsive">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th>Item Name</th>
+                <th>Date of Claim</th>
+              </tr>
+            </thead>
+            <tbody id="resolvedTransactionsTableBody">
+              <tr>
+                <td colspan="3" class="no-data">Loading resolved transactions...</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
