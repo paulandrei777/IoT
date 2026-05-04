@@ -623,6 +623,13 @@ function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentS
   const dropdown = document.getElementById('itemStatusDropdown');
   if (dropdown) dropdown.value = currentStatus || 'pending';
 
+  // Reset delete button to fresh state
+  const deleteBtn = document.getElementById('modalDeleteBtn');
+  if (deleteBtn) {
+    deleteBtn.disabled = false;
+    deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Delete Item';
+  }
+
   modal.style.display = 'flex';
 }
 
@@ -659,23 +666,26 @@ async function deleteItem() {
   if (!confirmed) return;
 
   const deleteBtn = document.getElementById('modalDeleteBtn');
-  if (deleteBtn) {
-    deleteBtn.disabled = true;
-    deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Deleting...';
-  }
-
+  const itemIdToDelete = currentItemId;
+  
   try {
+    if (deleteBtn) {
+      deleteBtn.disabled = true;
+      deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Deleting...';
+    }
+
     const { error } = await window.supabaseClient
-      .from('items').delete().eq('id', currentItemId);
+      .from('items').delete().eq('id', itemIdToDelete);
     if (error) throw error;
 
     alert('✅ Item deleted successfully!');
-    closeItemActionModal();
+    currentItemId = null;
     await loadItemsTable();
+    closeItemActionModal();
   } catch (error) {
     console.error('[deleteItem] Error:', error);
     alert('Error deleting item: ' + error.message);
-    
+  } finally {
     if (deleteBtn) {
       deleteBtn.disabled = false;
       deleteBtn.innerHTML = '<i class="fas fa-trash"></i> Delete Item';
