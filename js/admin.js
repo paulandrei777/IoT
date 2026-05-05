@@ -336,8 +336,7 @@ async function updateDashboardStats() {
     ] = await Promise.all([
       window.supabaseClient
         .from('items')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'approved'),
+        .select('*', { count: 'exact', head: true }),
       window.supabaseClient
         .from('lost_reports')
         .select('*', { count: 'exact', head: true })

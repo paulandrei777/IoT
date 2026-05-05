@@ -11,10 +11,10 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 const aiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const configuredGeminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const configuredGeminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 const geminiModelCandidates = Array.from(new Set([
   configuredGeminiModel,
-  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
 ])).filter(Boolean);
 
 const isModelNotFoundError = (error) => {
