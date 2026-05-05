@@ -686,9 +686,18 @@ function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentS
   document.getElementById('modalItemImage').src = imageUrl || '';
 
   const nameEl = document.getElementById('modalItemName');
-  if (nameEl) nameEl.value = itemName || '';
+  if (nameEl) {
+    nameEl.value = itemName || '';
+    nameEl.disabled = false;
+    nameEl.readOnly = false;
+  }
+
   const descEl = document.getElementById('modalItemDescription');
-  if (descEl) descEl.value = aiDescription || '';
+  if (descEl) {
+    descEl.value = aiDescription || '';
+    descEl.disabled = false;
+    descEl.readOnly = false;
+  }
 
   const dropdown = document.getElementById('itemStatusDropdown');
   if (dropdown) dropdown.value = currentStatus || 'pending';
@@ -713,13 +722,25 @@ async function updateItemStatus() {
 
   const dropdown = document.getElementById('itemStatusDropdown');
   const newStatus = dropdown?.value || 'pending';
+  const nameEl = document.getElementById('modalItemName');
+  const descEl = document.getElementById('modalItemDescription');
+
+  const updatedDisplayName = (nameEl?.value || '').trim();
+  const updatedDescription = descEl?.value || '';
 
   try {
     const { error } = await window.supabaseClient
-      .from('items').update({ status: newStatus }).eq('id', currentItemId);
+      .from('items')
+      .update({
+        status: newStatus,
+        display_name: updatedDisplayName,
+        ai_description: updatedDescription,
+      })
+      .eq('id', currentItemId);
+
     if (error) throw error;
 
-    showAdminToast('Item status updated to ' + newStatus.toUpperCase());
+    showAdminToast('Item changes saved successfully.');
     await loadItemsTable();
     closeItemActionModal();
   } catch (error) {
