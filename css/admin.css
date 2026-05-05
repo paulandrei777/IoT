@@ -1055,6 +1055,30 @@ body {
   overflow-y: auto;
 }
 
+.modal-content {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.6) rgba(15, 23, 42, 0.45);
+}
+
+.modal-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.45);
+  border-radius: 10px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.75) 0%, rgba(100, 116, 139, 0.9) 100%);
+  border-radius: 10px;
+  border: 2px solid rgba(15, 23, 42, 0.45);
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(203, 213, 225, 0.85) 0%, rgba(148, 163, 184, 0.95) 100%);
+}
+
 .modal-close {
   position: absolute;
   top: 18px;
@@ -1100,8 +1124,12 @@ body {
 .modal-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 30px;
   margin-bottom: 20px;
+}
+
+.modal-fields {
+  padding-left: 4px;
 }
 
 .modal-image-wrapper img {
@@ -1109,7 +1137,8 @@ body {
   max-height: 380px;
   object-fit: cover;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
 }
 
 .modal-fields .form-group {
@@ -1119,8 +1148,9 @@ body {
 .modal-fields label {
   display: block;
   margin-bottom: 8px;
-  font-weight: 600;
-  color: #e5e7eb;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: 0.01em;
 }
 
 .modal-input,
@@ -1130,10 +1160,26 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: var(--radius-md);
   background: rgba(15, 23, 42, 0.78);
-  color: #f8fafc;
+  color: #ffffff;
   font-family: var(--font);
   font-size: 0.95rem;
+  font-weight: 500;
   resize: vertical;
+}
+
+.modal-input::placeholder,
+.modal-textarea::placeholder {
+  color: #cbd5e1;
+  opacity: 1;
+}
+
+.modal-input[readonly],
+.modal-textarea[readonly],
+.modal-input:disabled,
+.modal-textarea:disabled {
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  opacity: 1;
 }
 
 .form-note {
