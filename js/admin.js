@@ -12,6 +12,9 @@ let currentSection = 'dashboard';
 let currentStatusFilter = 'all';
 let currentItemId = null;
 let currentAdminName = 'Admin';
+let currentManualMatchReport = null;
+let currentManualMatchItem = null;
+let manualMatchSearchTimer = null;
 window.currentAdminName = currentAdminName;
 
 function showAdminToast(message, type = 'success') {
@@ -136,6 +139,7 @@ async function loadItemsTable() {
       .from('items')
       .select('*')
       .neq('status', 'claimed')
+      .neq('status', 'CLAIMED')
       .order('created_at', { ascending: false });
 
     if (currentStatusFilter !== 'all') query = query.eq('status', currentStatusFilter);
@@ -269,8 +273,30 @@ function ensureLostReportModal() {
           <p><strong>Matched Item ID:</strong> <span id="lostReportModalMatchedItemId"></span></p>
         </div>
       </div>
+      <div class="manual-match-panel">
+        <h4>Manual Match</h4>
+        <p class="manual-match-help">Search a pending item and assign it to this report.</p>
+        <div class="manual-match-search-wrap">
+          <input
+            type="text"
+            id="manualMatchSearchInput"
+            class="manual-match-search-input"
+            placeholder="Type an item name to search..."
+            autocomplete="off"
+          >
+          <div id="manualMatchResults" class="manual-match-results" hidden></div>
+        </div>
+        <div id="manualMatchSelection" class="manual-match-selection" hidden>
+          <img id="manualMatchThumbnail" class="manual-match-thumbnail" src="" alt="Selected item thumbnail">
+          <div class="manual-match-selection-text">
+            <p><strong>ID:</strong> <span id="manualMatchSelectedId"></span></p>
+            <p><strong>Name:</strong> <span id="manualMatchSelectedName"></span></p>
+          </div>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeLostReportModal()">Close</button>
+        <button class="btn btn-success" id="assignMatchBtn" onclick="assignManualMatch()" disabled>Assign Match</button>
       </div>
     </div>`;
 
@@ -279,7 +305,188 @@ function ensureLostReportModal() {
   });
 
   document.body.appendChild(modal);
+  bindManualMatchControls();
   return modal;
+}
+
+function bindManualMatchControls() {
+  const input = document.getElementById('manualMatchSearchInput');
+  if (input && input.dataset.bound !== 'true') {
+    input.addEventListener('input', handleManualMatchSearchInput);
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Escape') hideManualMatchResults();
+    });
+    input.dataset.bound = 'true';
+  }
+}
+
+function resetManualMatchState() {
+  currentManualMatchItem = null;
+  const resultsEl = document.getElementById('manualMatchResults');
+  const selectionEl = document.getElementById('manualMatchSelection');
+  const assignBtn = document.getElementById('assignMatchBtn');
+  const input = document.getElementById('manualMatchSearchInput');
+  const selectedIdEl = document.getElementById('manualMatchSelectedId');
+  const selectedNameEl = document.getElementById('manualMatchSelectedName');
+  const thumbnailEl = document.getElementById('manualMatchThumbnail');
+
+  if (input) input.value = '';
+  if (resultsEl) {
+    resultsEl.innerHTML = '';
+    resultsEl.hidden = true;
+  }
+  if (selectionEl) selectionEl.hidden = true;
+  if (assignBtn) assignBtn.disabled = true;
+  if (selectedIdEl) selectedIdEl.textContent = '';
+  if (selectedNameEl) selectedNameEl.textContent = '';
+  if (thumbnailEl) {
+    thumbnailEl.src = FALLBACK_ITEM_IMAGE;
+    thumbnailEl.alt = 'Selected item thumbnail';
+  }
+}
+
+function hideManualMatchResults() {
+  const resultsEl = document.getElementById('manualMatchResults');
+  if (resultsEl) resultsEl.hidden = true;
+}
+
+async function handleManualMatchSearchInput(event) {
+  const query = (event.target.value || '').trim();
+  currentManualMatchItem = null;
+
+  const assignBtn = document.getElementById('assignMatchBtn');
+  const selectionEl = document.getElementById('manualMatchSelection');
+  const selectedIdEl = document.getElementById('manualMatchSelectedId');
+  const selectedNameEl = document.getElementById('manualMatchSelectedName');
+
+  if (assignBtn) assignBtn.disabled = true;
+  if (selectionEl) selectionEl.hidden = true;
+  if (selectedIdEl) selectedIdEl.textContent = '';
+  if (selectedNameEl) selectedNameEl.textContent = '';
+
+  clearTimeout(manualMatchSearchTimer);
+
+  if (query.length < 2) {
+    hideManualMatchResults();
+    const resultsEl = document.getElementById('manualMatchResults');
+    if (resultsEl) resultsEl.innerHTML = '';
+    return;
+  }
+
+  manualMatchSearchTimer = setTimeout(async () => {
+    await searchManualMatchItems(query);
+  }, 250);
+}
+
+async function searchManualMatchItems(query) {
+  if (!window.supabaseClient) return;
+
+  const resultsEl = document.getElementById('manualMatchResults');
+  if (!resultsEl) return;
+
+  resultsEl.hidden = false;
+  resultsEl.innerHTML = '<div class="manual-match-empty">Searching items...</div>';
+
+  try {
+    const { data, error } = await window.supabaseClient
+      .from('items')
+      .select('id, display_name, image_url, status')
+      .eq('status', 'pending')
+      .ilike('display_name', `%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(6);
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      resultsEl.innerHTML = '<div class="manual-match-empty">No pending items found.</div>';
+      return;
+    }
+
+    resultsEl.innerHTML = data.map(item => {
+      const itemImageUrl = item.image_url ? getSupabasePublicUrl(item.image_url) : FALLBACK_ITEM_IMAGE;
+      const safeItemName = String(item.display_name || 'Unknown Item').replace(/'/g, "\\'");
+      const safeImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
+
+      return `
+        <button type="button" class="manual-match-result" onclick="selectManualMatchItem('${item.id}', '${safeItemName}', '${safeImageUrl}')">
+          <img src="${itemImageUrl}" alt="${item.display_name || 'Item'}" class="manual-match-result-thumb">
+          <div class="manual-match-result-text">
+            <strong>${item.display_name || 'Unknown Item'}</strong>
+            <span>ID: ${item.id}</span>
+          </div>
+        </button>`;
+    }).join('');
+  } catch (error) {
+    console.error('[searchManualMatchItems] Error:', error);
+    resultsEl.innerHTML = '<div class="manual-match-empty">Error searching items.</div>';
+  }
+}
+
+function selectManualMatchItem(itemId, itemName, imageUrl) {
+  currentManualMatchItem = { id: itemId, name: itemName, imageUrl };
+
+  const resultsEl = document.getElementById('manualMatchResults');
+  const selectionEl = document.getElementById('manualMatchSelection');
+  const selectedIdEl = document.getElementById('manualMatchSelectedId');
+  const selectedNameEl = document.getElementById('manualMatchSelectedName');
+  const thumbnailEl = document.getElementById('manualMatchThumbnail');
+  const assignBtn = document.getElementById('assignMatchBtn');
+  const input = document.getElementById('manualMatchSearchInput');
+
+  if (selectedIdEl) selectedIdEl.textContent = itemId || 'N/A';
+  if (selectedNameEl) selectedNameEl.textContent = itemName || 'Unknown Item';
+  if (thumbnailEl) {
+    thumbnailEl.src = imageUrl || FALLBACK_ITEM_IMAGE;
+    thumbnailEl.alt = itemName || 'Selected item';
+  }
+  if (selectionEl) selectionEl.hidden = false;
+  if (assignBtn) assignBtn.disabled = false;
+  if (resultsEl) resultsEl.hidden = true;
+  if (input) input.value = itemName || '';
+}
+
+async function assignManualMatch() {
+  if (!window.supabaseClient || !currentManualMatchReport || !currentManualMatchItem) return;
+
+  const assignBtn = document.getElementById('assignMatchBtn');
+
+  try {
+    if (assignBtn) {
+      assignBtn.disabled = true;
+      assignBtn.textContent = 'Assigning...';
+    }
+
+    const [reportUpdate, itemUpdate] = await Promise.all([
+      window.supabaseClient
+        .from('lost_reports')
+        .update({
+          matched_item_id: currentManualMatchItem.id,
+          status: 'MATCHED',
+        })
+        .eq('id', currentManualMatchReport.id),
+      window.supabaseClient
+        .from('items')
+        .update({ status: 'CLAIMED' })
+        .eq('id', currentManualMatchItem.id),
+    ]);
+
+    if (reportUpdate.error) throw reportUpdate.error;
+    if (itemUpdate.error) throw itemUpdate.error;
+
+    showAdminToast('Manual match assigned successfully.');
+    await updateDashboardStats();
+    await loadVerificationHub();
+    await loadResolvedTransactionsTable();
+    await loadLostReportsTable();
+    await loadItemsTable();
+    closeLostReportModal();
+  } catch (error) {
+    console.error('[assignManualMatch] Error:', error);
+    showAdminToast('Error assigning manual match: ' + error.message, 'error');
+  } finally {
+    if (assignBtn) assignBtn.textContent = 'Assign Match';
+  }
 }
 
 function openLostReportModal(report) {
@@ -316,12 +523,18 @@ function openLostReportModal(report) {
   setText('lostReportModalStatus', (report.status || 'pending').toUpperCase());
   setText('lostReportModalMatchedItemId', report.matched_item_id || 'None');
 
+  currentManualMatchReport = report;
+  resetManualMatchState();
+  bindManualMatchControls();
+
   modal.style.display = 'flex';
 }
 
 function closeLostReportModal() {
   const modal = document.getElementById('lostReportModal');
   if (modal) modal.style.display = 'none';
+  currentManualMatchReport = null;
+  currentManualMatchItem = null;
 }
 
 // ========== DASHBOARD STATS ==========
