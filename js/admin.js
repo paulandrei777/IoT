@@ -390,7 +390,7 @@ async function loadResolvedTransactionsTable() {
     if (itemIds.length > 0) {
       const { data: itemsData, error: itemsError } = await window.supabaseClient
         .from('items')
-        .select('id, item_name, image_url')
+        .select('id, display_name, image_url')
         .in('id', itemIds);
 
       if (itemsError) throw itemsError;
@@ -406,7 +406,7 @@ async function loadResolvedTransactionsTable() {
       const rawUrl = matchedItem?.image_url;
       const itemImageUrl = rawUrl ? getSupabasePublicUrl(rawUrl) : FALLBACK_ITEM_IMAGE;
       const safeItemImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
-      const safeItemName = String(matchedItem?.item_name || 'Item').replace(/'/g, "\\'");
+      const safeItemName = String(matchedItem?.display_name || 'Unknown Item').replace(/'/g, "\\'");
 
       const dateReported = report.created_at
         ? new Date(report.created_at).toLocaleDateString()
@@ -418,7 +418,7 @@ async function loadResolvedTransactionsTable() {
       return `
         <tr>
           <td><strong>${report.student_name || 'N/A'}</strong></td>
-          <td>${matchedItem?.item_name || 'N/A'}</td>
+          <td>${matchedItem?.display_name || 'Unknown Item'}</td>
           <td>
             <button type="button" class="resolved-image-btn" onclick="openImageModal('${safeItemImageUrl}', '${safeItemName}')" style="cursor:pointer; border:none; background:none;">
               <img src="${itemImageUrl}" alt="Item" class="resolved-item-thumbnail" style="width:50px; height:50px; object-fit:cover; border-radius:5px;">
