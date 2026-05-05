@@ -699,6 +699,39 @@ body {
   letter-spacing: 0.5px;
 }
 
+.resolved-transactions-table {
+  table-layout: fixed;
+  min-width: 1060px;
+}
+
+.resolved-transactions-table th:nth-child(1),
+.resolved-transactions-table td:nth-child(1) {
+  width: 16%;
+}
+
+.resolved-transactions-table th:nth-child(2),
+.resolved-transactions-table td:nth-child(2) {
+  width: 18%;
+}
+
+.resolved-transactions-table th:nth-child(3),
+.resolved-transactions-table td:nth-child(3) {
+  width: 12%;
+}
+
+.resolved-transactions-table th:nth-child(4),
+.resolved-transactions-table td:nth-child(4),
+.resolved-transactions-table th:nth-child(5),
+.resolved-transactions-table td:nth-child(5) {
+  width: 14%;
+}
+
+.resolved-transactions-table th:nth-child(6),
+.resolved-transactions-table td:nth-child(6) {
+  width: 16%;
+  word-break: break-word;
+}
+
 .admin-table tbody tr:hover {
   background-color: var(--gray-50);
 }

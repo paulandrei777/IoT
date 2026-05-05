@@ -11,6 +11,8 @@ const FALLBACK_ITEM_IMAGE = '/assets/images/domini.png';
 let currentSection = 'dashboard';
 let currentStatusFilter = 'all';
 let currentItemId = null;
+let currentAdminName = 'Admin';
+window.currentAdminName = currentAdminName;
 
 function showAdminToast(message, type = 'success') {
   const toast = document.createElement('div');
@@ -323,10 +325,7 @@ function closeLostReportModal() {
 }
 
 // ========== DASHBOARD STATS ==========
-// FIX: Total Items = approved items only (not claimed/pending admin review)
-//      Pending Reports = lost_reports with no match yet (matched_item_id IS NULL, not resolved)
-//      Resolved Matches = lost_reports with status = 'resolved'
-async function fetchDashboardStats() {
+async function updateDashboardStats() {
   if (!window.supabaseClient) return;
 
   try {
@@ -338,12 +337,11 @@ async function fetchDashboardStats() {
       window.supabaseClient
         .from('items')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'approved'),                  // Only approved (visible) items
+        .eq('status', 'approved'),
       window.supabaseClient
         .from('lost_reports')
         .select('*', { count: 'exact', head: true })
-        .is('matched_item_id', null)                // No AI match yet
-        .neq('status', 'resolved'),                 // Not already resolved
+        .eq('status', 'pending'),
       window.supabaseClient
         .from('lost_reports')
         .select('*', { count: 'exact', head: true })
@@ -355,51 +353,44 @@ async function fetchDashboardStats() {
     set('pendingReports', pendingReports);
     set('matchedReports', resolvedReports);
 
-    console.log('[fetchDashboardStats]', { totalItems, pendingReports, resolvedReports });
+    console.log('[updateDashboardStats]', { totalItems, pendingReports, resolvedReports });
   } catch (error) {
-    console.error('[fetchDashboardStats] Error:', error);
+    console.error('[updateDashboardStats] Error:', error);
   }
 }
 
-// updateDashboardStats is now just an alias for fetchDashboardStats (they were duplicated)
-async function updateDashboardStats() {
-  await fetchDashboardStats();
+async function fetchDashboardStats() {
+  return updateDashboardStats();
 }
 
 // ========== RESOLVED TRANSACTIONS TABLE ==========
-// FIX: Query lost_reports with status='resolved' and join items via matched_item_id
 async function loadResolvedTransactionsTable() {
   const tbody = document.getElementById('resolvedTransactionsTableBody');
   if (!tbody || !window.supabaseClient) return;
 
-  tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading resolved transactions...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="no-data">Loading resolved transactions...</td></tr>';
 
   try {
-    // FIX: Use matched_item_id for the foreign key join, not a direct items() join
-    // Supabase foreign key join only works if the FK is set up in the schema.
-    // We fetch lost_reports first, then batch-fetch the matched items separately.
     const { data: reports, error: reportsError } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, created_at, resolved_at, matched_item_id')
+      .select('id, student_name, created_at, resolved_at, released_by, matched_item_id')
       .eq('status', 'resolved')
       .order('resolved_at', { ascending: false });
 
     if (reportsError) throw reportsError;
 
     if (!reports || reports.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No resolved transactions found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="no-data">No resolved transactions found.</td></tr>';
       return;
     }
 
-    // Collect unique item IDs that are not null
     const itemIds = [...new Set(reports.map(r => r.matched_item_id).filter(Boolean))];
 
-    // Fetch all matched items in one query
     let itemsMap = {};
     if (itemIds.length > 0) {
       const { data: itemsData, error: itemsError } = await window.supabaseClient
         .from('items')
-        .select('id, display_name, image_url')
+        .select('id, item_name, image_url')
         .in('id', itemIds);
 
       if (itemsError) throw itemsError;
@@ -411,38 +402,39 @@ async function loadResolvedTransactionsTable() {
 
     const rows = reports.map(report => {
       const matchedItem = report.matched_item_id ? itemsMap[report.matched_item_id] : null;
-      const itemImageUrl = matchedItem?.image_url
-        ? getSupabasePublicUrl(matchedItem.image_url)
-        : FALLBACK_ITEM_IMAGE;
+
+      const rawUrl = matchedItem?.image_url;
+      const itemImageUrl = rawUrl ? getSupabasePublicUrl(rawUrl) : FALLBACK_ITEM_IMAGE;
       const safeItemImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
-      const safeItemName = String(matchedItem?.display_name || 'Item image').replace(/'/g, "\\'");
+      const safeItemName = String(matchedItem?.item_name || 'Item').replace(/'/g, "\\'");
 
       const dateReported = report.created_at
-        ? new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        ? new Date(report.created_at).toLocaleDateString()
         : 'N/A';
       const dateClaimed = report.resolved_at
-        ? new Date(report.resolved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        ? new Date(report.resolved_at).toLocaleDateString()
         : 'N/A';
 
       return `
         <tr>
-          <td>${report.student_name || 'N/A'}</td>
-          <td>${matchedItem?.display_name || 'N/A'}</td>
+          <td><strong>${report.student_name || 'N/A'}</strong></td>
+          <td>${matchedItem?.item_name || 'N/A'}</td>
           <td>
-            <button type="button" class="resolved-image-button" onclick="openImageModal('${safeItemImageUrl}', '${safeItemName}')">
-              <img src="${itemImageUrl}" alt="${matchedItem?.display_name || 'Item'}" class="resolved-item-thumbnail">
+            <button type="button" class="resolved-image-btn" onclick="openImageModal('${safeItemImageUrl}', '${safeItemName}')" style="cursor:pointer; border:none; background:none;">
+              <img src="${itemImageUrl}" alt="Item" class="resolved-item-thumbnail" style="width:50px; height:50px; object-fit:cover; border-radius:5px;">
             </button>
           </td>
           <td>${dateReported}</td>
           <td>${dateClaimed}</td>
+          <td>${report.released_by || 'N/A'}</td>
         </tr>`;
     });
 
     tbody.innerHTML = rows.join('');
-    console.log(`[loadResolvedTransactionsTable] Rendered ${rows.length} rows.`);
+    console.log(`[loadResolvedTransactionsTable] Success: ${rows.length} rows rendered.`);
   } catch (err) {
     console.error('[loadResolvedTransactionsTable] Error:', err);
-    tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading resolved transactions.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="error">Error loading data. Check console.</td></tr>';
   }
 }
 
@@ -553,6 +545,7 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
       .update({
         status: 'resolved',
         resolved_at: new Date().toISOString(),
+        released_by: currentAdminName,
       })
       .eq('id', reportId);
 
@@ -840,14 +833,18 @@ async function loadUserProfile() {
     if (!session?.user?.id) return;
 
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
-    set('userName', session.user.user_metadata?.full_name || session.user.email || 'Admin');
+    currentAdminName = session.user.user_metadata?.full_name || session.user.email || 'Admin';
+    window.currentAdminName = currentAdminName;
+    set('userName', currentAdminName);
     set('userEmail', session.user.email || '');
     set('userRole', 'Administrator');
 
     if (typeof getProfile === 'function') {
       const profile = await getProfile(session.user.id);
       if (profile) {
-        set('userName', profile.full_name || session.user.email || 'Admin');
+        currentAdminName = profile.full_name || session.user.user_metadata?.full_name || session.user.email || 'Admin';
+        window.currentAdminName = currentAdminName;
+        set('userName', currentAdminName);
         set('userEmail', profile.email || session.user.email || '');
       }
     }
@@ -886,7 +883,7 @@ function initPage() {
   sidebarClose?.addEventListener('click', closeSidebar);
   sidebarOverlay?.addEventListener('click', closeSidebar);
   refreshBtn?.addEventListener('click', async () => {
-    await fetchDashboardStats();
+    await updateDashboardStats();
     await loadVerificationHub();
   });
 
@@ -915,7 +912,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof checkAuthAndRedirect === 'function') await checkAuthAndRedirect();
     await loadUserProfile();
     initPage();
-    await fetchDashboardStats();   // single unified stats call
+    await updateDashboardStats();   // single unified stats call
     await loadVerificationHub();
 
     console.log('=== Admin Dashboard Initialization Complete ===');
