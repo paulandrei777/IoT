@@ -86,7 +86,6 @@ function showSection(sectionId) {
 
     if (sectionId === 'itemManagement') loadItemsTable();
     else if (sectionId === 'lostItems') loadLostItemsTable();
-    else if (sectionId === 'claimRequests') loadClaimRequestsTable();
     else if (sectionId === 'resolvedTransactions') loadResolvedTransactionsTable();
 
     if (sidebar) sidebar.classList.remove('active');
@@ -329,128 +328,6 @@ function closeLostReportModal() {
   if (modal) modal.style.display = 'none';
 }
 
-// ========== CLAIM REQUESTS TABLE ==========
-// FIX: Shows reports where matched_item_id IS NOT NULL (AI has found a match)
-// FIX: Join with items table; added fallback if FK relationship isn't configured in Supabase
-async function loadClaimRequestsTable() {
-  const tbody = document.getElementById('claimRequestsTableBody');
-  if (!tbody || !window.supabaseClient) return;
-
-  tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading claim requests...</td></tr>';
-
-  try {
-    // --- STEP 1: Fetch pending reports that HAVE a matched_item_id ---
-    // Using .not() with 'is' filter for SQL NOT NULL
-    const { data: reports, error } = await window.supabaseClient
-      .from('lost_reports')
-      .select('*')
-      .eq('status', 'pending')
-      .not('matched_item_id', 'is', null)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-
-    console.log(`[loadClaimRequestsTable] Rows fetched: ${reports?.length ?? 0}`);
-    console.log('[loadClaimRequestsTable] matched_item_id values:', reports?.map(report => report.matched_item_id));
-    console.table(reports);
-
-    if (!reports || reports.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending claim requests found.</td></tr>';
-      return;
-    }
-
-    // --- STEP 3: For each report, fetch matched item separately (avoids FK dependency) ---
-    const rows = await Promise.all(
-      reports.map(async report => {
-        let matchedItem = null;
-
-        if (report.matched_item_id) {
-          const { data: itemData, error: itemError } = await window.supabaseClient
-            .from('items')
-            .select('id, display_name, image_url, status')
-            .eq('id', report.matched_item_id)
-            .maybeSingle();
-
-          if (itemError) {
-            console.warn(`[loadClaimRequestsTable] Could not fetch item ${report.matched_item_id}:`, itemError.message);
-          } else {
-            matchedItem = itemData;
-          }
-        }
-
-        console.log(`[loadClaimRequestsTable] Report ${report.id} → matched_item_id: ${report.matched_item_id}`, matchedItem);
-
-        // Only include claim requests where the matched item is approved
-        if (matchedItem && matchedItem.status !== 'approved') return null;
-
-        return { report, matchedItem };
-      })
-    );
-
-    const filtered = rows.filter(r => r !== null);
-    if (!filtered || filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending claim requests found.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = filtered.map(({ report, matchedItem }) => {
-      const itemPublicUrl = matchedItem?.image_url
-        ? getSupabasePublicUrl(matchedItem.image_url)
-        : FALLBACK_ITEM_IMAGE;
-
-      const studentPublicUrl = report.ref_photo_url_1
-        ? getSupabasePublicUrl(report.ref_photo_url_1)
-        : '';
-
-      const requestDate = new Date(report.created_at).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric',
-      });
-
-      const itemPhotoHtml = `
-        <img src="${itemPublicUrl}" alt="Item" class="table-thumbnail"
-          onclick="openLightbox('${itemPublicUrl}')"
-          title="Item Photo"
-          style="cursor:pointer;max-height:50px;max-width:50px;border-radius:4px;margin-right:5px;"
-          onerror="this.onerror=null;this.src='${FALLBACK_ITEM_IMAGE}'">`;
-
-      const studentPhotoHtml = studentPublicUrl
-        ? `<img src="${studentPublicUrl}" alt="Reference" class="table-thumbnail"
-             onclick="openLightbox('${studentPublicUrl}')"
-             title="Student Photo"
-             style="cursor:pointer;max-height:50px;max-width:50px;border-radius:4px;margin-right:5px;">`
-        : '<span class="no-image">—</span>';
-
-      return `
-        <tr>
-          <td>${matchedItem?.display_name || 'N/A'}</td>
-          <td>${report.student_email || 'N/A'}</td>
-          <td>${requestDate}</td>
-          <td><span class="status-badge status-${report.status || 'pending'}">${(report.status || 'pending').toUpperCase()}</span></td>
-          <td>
-            <div style="display:flex;align-items:center;gap:8px;">
-              ${itemPhotoHtml}
-              ${studentPhotoHtml}
-              <span class="match-score" title="AI Match Score" style="font-weight:bold;color:#D32F2F;">${report.match_score ?? 0}%</span>
-              <button class="btn btn-small"
-                data-report-id="${report.id}"
-                data-item-id="${matchedItem?.id || ''}"
-                data-item-image-url="${itemPublicUrl}"
-                data-student-image-url="${studentPublicUrl}"
-                data-match-score="${report.match_score ?? 0}"
-                data-student-email="${report.student_email || ''}"
-                onclick="handleVerifyClaim(this)">Verify</button>
-            </div>
-          </td>
-        </tr>`;
-    }).join('');
-
-    console.log('[loadClaimRequestsTable] Table rendered successfully.');
-  } catch (error) {
-    console.error('[loadClaimRequestsTable] Error:', error);
-    tbody.innerHTML = '<tr><td colspan="6" class="error">Error loading requests. Please refresh.</td></tr>';
-  }
-}
-
 // ========== DASHBOARD STATS ==========
 async function fetchDashboardStats() {
   if (!window.supabaseClient) return;
@@ -459,19 +336,19 @@ async function fetchDashboardStats() {
     const [
       { count: totalItems },
       { count: pendingReports },
-      { count: claimedItems },
+      { count: resolvedReports },
     ] = await Promise.all([
       window.supabaseClient.from('items').select('*', { count: 'exact', head: true }),
       window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      window.supabaseClient.from('items').select('*', { count: 'exact', head: true }).eq('status', 'claimed'),
+      window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'resolved'),
     ]);
 
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? 0; };
     set('totalItems', totalItems);
     set('pendingReports', pendingReports);
-    set('matchedReports', claimedItems);
+    set('matchedReports', resolvedReports);
 
-    console.log('[fetchDashboardStats]', { totalItems, pendingReports, claimedItems });
+    console.log('[fetchDashboardStats]', { totalItems, pendingReports, resolvedReports });
   } catch (error) {
     console.error('[fetchDashboardStats] Error:', error);
   }
@@ -485,38 +362,24 @@ async function loadResolvedTransactionsTable() {
   tbody.innerHTML = '<tr><td colspan="3" class="no-data">Loading resolved transactions...</td></tr>';
 
   try {
-    // Query items that have been claimed
-    const { data: items, error } = await window.supabaseClient
-      .from('items')
-      .select('id, display_name, created_at')
-      .eq('status', 'claimed')
+    const { data: reports, error } = await window.supabaseClient
+      .from('lost_reports')
+      .select('id, student_name, created_at, items(display_name)')
+      .eq('status', 'resolved')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    if (!items || items.length === 0) {
+    if (!reports || reports.length === 0) {
       tbody.innerHTML = '<tr><td colspan="3" class="no-data">No resolved transactions found.</td></tr>';
       return;
     }
 
-    // For each claimed item, find the student who claimed it
-    const rows = await Promise.all(items.map(async item => {
-      let studentName = 'N/A';
-      // Find the resolved report that matches this item
-      const { data: report } = await window.supabaseClient
-        .from('lost_reports')
-        .select('student_name')
-        .eq('matched_item_id', item.id)
-        .eq('status', 'resolved')
-        .maybeSingle();
-      
-      if (report) {
-        studentName = report.student_name || 'N/A';
-      }
-      
-      const date = new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return `<tr><td>${studentName}</td><td>${item.display_name || 'N/A'}</td><td>${date}</td></tr>`;
-    }));
+    const rows = reports.map(report => {
+      const matchedItem = Array.isArray(report.items) ? report.items[0] : report.items;
+      const date = new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `<tr><td>${report.student_name || 'N/A'}</td><td>${matchedItem?.display_name || 'N/A'}</td><td>${date}</td></tr>`;
+    });
 
     tbody.innerHTML = rows.join('');
   } catch (err) {
@@ -532,11 +395,10 @@ async function loadVerificationHub() {
   try {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('*')
+      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1, items(*)')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(10);
 
     if (error) throw error;
 
@@ -550,14 +412,8 @@ async function loadVerificationHub() {
 
     const cards = await Promise.all(
       reports.map(async report => {
-        let matchedItem = null;
-        if (report.matched_item_id) {
-          const { data } = await window.supabaseClient
-            .from('items').select('*').eq('id', report.matched_item_id).single();
-          matchedItem = data;
-        }
+        const matchedItem = Array.isArray(report.items) ? report.items[0] : report.items;
 
-        // Skip any report whose matched item is not in 'approved' state
         if (matchedItem && matchedItem.status && matchedItem.status !== 'approved') return null;
 
         const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
@@ -633,10 +489,9 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
 
     await Promise.all([
       loadVerificationHub(),
-      loadClaimRequestsTable(),
-      loadItemsTable(),
       updateDashboardStats(),
       loadResolvedTransactionsTable(),
+      loadItemsTable(),
     ]);
 
     showAdminToast('Match Approved! Item marked as claimed');
@@ -656,20 +511,18 @@ async function rejectMatch(reportId, triggerButton = null) {
 
     const { error } = await window.supabaseClient
       .from('lost_reports')
-      .update({ matched_item_id: null, match_score: 0, status: 'pending' })
+      .update({ matched_item_id: null, match_score: 0 })
       .eq('id', reportId);
 
     if (error) throw error;
 
     await Promise.all([
       loadVerificationHub(),
-      loadClaimRequestsTable(),
-      loadItemsTable(),
       loadLostItemsTable(),
       updateDashboardStats(),
     ]);
 
-    showAdminToast('Match Rejected! Report moved to Lost Items');
+    showAdminToast('Match rejected. Report returned to Lost Items.');
   } catch (error) {
     console.error('[rejectMatch] Error:', error);
     showAdminToast('Error rejecting match: ' + error.message, 'error');
@@ -728,14 +581,14 @@ async function commitRejectedMatch(reportId) {
 async function updateDashboardStats() {
   if (!window.supabaseClient) return;
   try {
-    const { count: claimedItems } = await window.supabaseClient
-      .from('items')
+    const { count: resolvedReports } = await window.supabaseClient
+      .from('lost_reports')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'claimed');
+      .eq('status', 'resolved');
 
     const el = document.getElementById('matchedReports');
-    if (el) el.textContent = claimedItems ?? 0;
-    console.log('[updateDashboardStats] claimedItems:', claimedItems);
+    if (el) el.textContent = resolvedReports ?? 0;
+    console.log('[updateDashboardStats] resolvedReports:', resolvedReports);
   } catch (err) {
     console.error('[updateDashboardStats] Error:', err);
   }
@@ -756,8 +609,8 @@ async function refreshMatchViews() {
   await Promise.all([
     loadItemsTable(),
     loadLostItemsTable(),
-    loadClaimRequestsTable(),
     loadVerificationHub(),
+    loadResolvedTransactionsTable(),
     fetchDashboardStats(),
   ]);
 }
