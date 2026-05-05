@@ -493,27 +493,27 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
   try {
     setVerificationActionLoading(triggerButton, true, 'Approving...');
 
-    const [reportUpdate, itemUpdate] = await Promise.all([
-      window.supabaseClient
-        .from('lost_reports')
-        .update({ status: 'resolved', resolved_at: new Date().toISOString() })
-        .eq('id', reportId),
-      window.supabaseClient
-        .from('items')
-        .update({ status: 'claimed' })
-        .eq('id', resolvedItemId),
-    ]);
+    // Update lost_reports: Set status = 'resolved' and resolved_at = current timestamp
+    const reportUpdate = await window.supabaseClient
+      .from('lost_reports')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', reportId);
 
     if (reportUpdate.error) throw reportUpdate.error;
+
+    // Update items: Set status = 'claimed'
+    const itemUpdate = await window.supabaseClient
+      .from('items')
+      .update({ status: 'claimed' })
+      .eq('id', resolvedItemId);
+
     if (itemUpdate.error) throw itemUpdate.error;
 
-    await Promise.all([
-      loadVerificationHub(),
-      loadLostReportsTable(),
-      loadResolvedTransactionsTable(),
-      updateDashboardStats(),
-      loadItemsTable(),
-    ]);
+    // Refresh UI in the specified order
+    await updateDashboardStats();
+    await loadVerificationHub();
+    await loadResolvedTransactionsTable();
+    await loadLostReportsTable();
 
     showAdminToast('Match Approved! Item marked as claimed');
   } catch (error) {
@@ -530,6 +530,7 @@ async function rejectMatch(reportId, triggerButton = null) {
   try {
     setVerificationActionLoading(triggerButton, true, 'Rejecting...');
 
+    // Update lost_reports: Set matched_item_id = null, match_score = 0, status = 'pending'
     const { error } = await window.supabaseClient
       .from('lost_reports')
       .update({ matched_item_id: null, match_score: 0, status: 'pending' })
@@ -537,11 +538,11 @@ async function rejectMatch(reportId, triggerButton = null) {
 
     if (error) throw error;
 
-    await Promise.all([
-      loadVerificationHub(),
-      loadLostReportsTable(),
-      updateDashboardStats(),
-    ]);
+    // Refresh UI in the specified order
+    await updateDashboardStats();
+    await loadVerificationHub();
+    await loadResolvedTransactionsTable();
+    await loadLostReportsTable();
 
     showAdminToast('Match rejected. Report returned to Lost Items.');
   } catch (error) {
@@ -602,14 +603,34 @@ async function commitRejectedMatch(reportId) {
 async function updateDashboardStats() {
   if (!window.supabaseClient) return;
   try {
-    const { count: resolvedReports } = await window.supabaseClient
+    // Total Items: Count all rows where status = 'approved'
+    const { count: totalItemsCount } = await window.supabaseClient
+      .from('items')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'approved');
+
+    // Pending Reports: Count all rows where status = 'pending'
+    const { count: pendingReportsCount } = await window.supabaseClient
+      .from('lost_reports')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    // Resolved Matches: Count all rows where status = 'resolved'
+    const { count: resolvedReportsCount } = await window.supabaseClient
       .from('lost_reports')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'resolved');
 
-    const el = document.getElementById('matchedReports');
-    if (el) el.textContent = resolvedReports ?? 0;
-    console.log('[updateDashboardStats] resolvedReports:', resolvedReports);
+    const totalItemsEl = document.getElementById('totalItems');
+    if (totalItemsEl) totalItemsEl.textContent = totalItemsCount ?? 0;
+
+    const pendingReportsEl = document.getElementById('pendingReports');
+    if (pendingReportsEl) pendingReportsEl.textContent = pendingReportsCount ?? 0;
+
+    const matchedReportsEl = document.getElementById('matchedReports');
+    if (matchedReportsEl) matchedReportsEl.textContent = resolvedReportsCount ?? 0;
+
+    console.log('[updateDashboardStats] Total Items:', totalItemsCount, 'Pending Reports:', pendingReportsCount, 'Resolved Matches:', resolvedReportsCount);
   } catch (err) {
     console.error('[updateDashboardStats] Error:', err);
   }
