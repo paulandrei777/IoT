@@ -85,7 +85,7 @@ function showSection(sectionId) {
     currentSection = sectionId;
 
     if (sectionId === 'itemManagement') loadItemsTable();
-    else if (sectionId === 'lostItems') loadLostItemsTable();
+    else if (sectionId === 'lostReports') loadLostReportsTable();
     else if (sectionId === 'resolvedTransactions') loadResolvedTransactionsTable();
 
     if (sidebar) sidebar.classList.remove('active');
@@ -187,11 +187,11 @@ async function loadItemsTable() {
   }
 }
 
-// ========== LOST ITEMS TABLE ==========
+// ========== LOST REPORTS TABLE ==========
 // Shows reports where matched_item_id IS NULL (no AI match yet)
 // NOTE: matched_item_id is a UUID column — never compare it to "" (causes 400 Bad Request)
-async function loadLostItemsTable() {
-  const tbody = document.getElementById('lostItemsTableBody');
+async function loadLostReportsTable() {
+  const tbody = document.getElementById('lostReportsTableBody');
   if (!tbody || !window.supabaseClient) return;
 
   tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
@@ -205,11 +205,11 @@ async function loadLostItemsTable() {
 
     if (error) throw error;
 
-    console.log(`[loadLostItemsTable] Rows fetched: ${data?.length ?? 0}`);
+    console.log(`[loadLostReportsTable] Rows fetched: ${data?.length ?? 0}`);
     console.table(data);
 
     if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No unmatched lost item reports found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending lost item reports found.</td></tr>';
       return;
     }
 
@@ -236,9 +236,9 @@ async function loadLostItemsTable() {
         </tr>`;
     }).join('');
 
-    console.log('[loadLostItemsTable] Table rendered successfully.');
+    console.log('[loadLostReportsTable] Table rendered successfully.');
   } catch (error) {
-    console.error('[loadLostItemsTable] Error:', error);
+    console.error('[loadLostReportsTable] Error:', error);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
   }
 }
@@ -509,8 +509,9 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
 
     await Promise.all([
       loadVerificationHub(),
-      updateDashboardStats(),
+      loadLostReportsTable(),
       loadResolvedTransactionsTable(),
+      updateDashboardStats(),
       loadItemsTable(),
     ]);
 
@@ -531,14 +532,14 @@ async function rejectMatch(reportId, triggerButton = null) {
 
     const { error } = await window.supabaseClient
       .from('lost_reports')
-      .update({ matched_item_id: null, match_score: 0 })
+      .update({ matched_item_id: null, match_score: 0, status: 'pending' })
       .eq('id', reportId);
 
     if (error) throw error;
 
     await Promise.all([
       loadVerificationHub(),
-      loadLostItemsTable(),
+      loadLostReportsTable(),
       updateDashboardStats(),
     ]);
 
@@ -628,7 +629,7 @@ async function resolveMatchedItemId(reportId) {
 async function refreshMatchViews() {
   await Promise.all([
     loadItemsTable(),
-    loadLostItemsTable(),
+    loadLostReportsTable(),
     loadVerificationHub(),
     loadResolvedTransactionsTable(),
     fetchDashboardStats(),
