@@ -359,32 +359,52 @@ async function loadResolvedTransactionsTable() {
   const tbody = document.getElementById('resolvedTransactionsTableBody');
   if (!tbody || !window.supabaseClient) return;
 
-  tbody.innerHTML = '<tr><td colspan="3" class="no-data">Loading resolved transactions...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading resolved transactions...</td></tr>';
 
   try {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, created_at, items(display_name)')
+      .select('id, student_name, created_at, resolved_at, items(display_name, image_url)')
       .eq('status', 'resolved')
-      .order('created_at', { ascending: false });
+      .order('resolved_at', { ascending: false });
 
     if (error) throw error;
 
     if (!reports || reports.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="3" class="no-data">No resolved transactions found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="no-data">No resolved transactions found.</td></tr>';
       return;
     }
 
     const rows = reports.map(report => {
       const matchedItem = Array.isArray(report.items) ? report.items[0] : report.items;
-      const date = new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return `<tr><td>${report.student_name || 'N/A'}</td><td>${matchedItem?.display_name || 'N/A'}</td><td>${date}</td></tr>`;
+      const itemImageUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : FALLBACK_ITEM_IMAGE;
+      const safeItemImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
+      const safeItemName = String(matchedItem?.display_name || 'Item image').replace(/'/g, "\\'");
+      const dateReported = report.created_at
+        ? new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'N/A';
+      const dateClaimed = report.resolved_at
+        ? new Date(report.resolved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : 'N/A';
+
+      return `
+        <tr>
+          <td>${report.student_name || 'N/A'}</td>
+          <td>${matchedItem?.display_name || 'N/A'}</td>
+          <td>
+            <button type="button" class="resolved-image-button" onclick="openImageModal('${safeItemImageUrl}', '${safeItemName}')">
+              <img src="${itemImageUrl}" alt="${matchedItem?.display_name || 'Item'}" class="resolved-item-thumbnail">
+            </button>
+          </td>
+          <td>${dateReported}</td>
+          <td>${dateClaimed}</td>
+        </tr>`;
     });
 
     tbody.innerHTML = rows.join('');
   } catch (err) {
     console.error('[loadResolvedTransactionsTable] Error:', err);
-    tbody.innerHTML = '<tr><td colspan="3" class="error">Error loading resolved transactions.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading resolved transactions.</td></tr>';
   }
 }
 
@@ -476,7 +496,7 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
     const [reportUpdate, itemUpdate] = await Promise.all([
       window.supabaseClient
         .from('lost_reports')
-        .update({ status: 'resolved' })
+        .update({ status: 'resolved', resolved_at: new Date().toISOString() })
         .eq('id', reportId),
       window.supabaseClient
         .from('items')
@@ -771,6 +791,21 @@ function closeLightbox() {
   if (lightbox) lightbox.style.display = 'none';
 }
 
+function openImageModal(imageSrc, altText = 'Image preview') {
+  const modal = document.getElementById('imageModal');
+  const image = document.getElementById('img01');
+  if (!modal || !image) return;
+
+  image.src = imageSrc || FALLBACK_ITEM_IMAGE;
+  image.alt = altText;
+  modal.style.display = 'flex';
+}
+
+function closeImageModal() {
+  const modal = document.getElementById('imageModal');
+  if (modal) modal.style.display = 'none';
+}
+
 // ========== PROFILE LOADING ==========
 async function loadUserProfile() {
   if (!window.supabaseClient) return;
@@ -833,6 +868,11 @@ function initPage() {
 
   const lightbox = document.getElementById('lightbox');
   lightbox?.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
+
+  const imageModal = document.getElementById('imageModal');
+  imageModal?.addEventListener('click', e => {
+    if (e.target === imageModal) closeImageModal();
+  });
 }
 
 // ========== DOM CONTENT LOADED ==========

@@ -117,12 +117,14 @@
               <tr>
                 <th>Student Name</th>
                 <th>Item Name</th>
-                <th>Date of Claim</th>
+                <th>Item Image</th>
+                <th>Date Reported</th>
+                <th>Date Claimed</th>
               </tr>
             </thead>
             <tbody id="resolvedTransactionsTableBody">
               <tr>
-                <td colspan="3" class="no-data">Loading resolved transactions...</td>
+                <td colspan="5" class="no-data">Loading resolved transactions...</td>
               </tr>
             </tbody>
           </table>
@@ -197,6 +199,11 @@
   <div id="lightbox" class="lightbox">
     <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
     <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <div id="imageModal" class="modal" style="display: none;">
+    <span class="close" onclick="closeImageModal()">&times;</span>
+    <img class="modal-content" id="img01" alt="Expanded item image">
   </div>
 
   <!-- Pending Item Review Modal -->
