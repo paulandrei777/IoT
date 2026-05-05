@@ -1,5 +1,4 @@
 // ========== SUPABASE CLIENT SAFETY CHECK ==========
-// NOTE: Never redeclare 'supabase' as a var — always use window.supabaseClient
 console.log("Checking Supabase connection...");
 if (window.supabaseClient) {
   console.log("✅ Supabase is ready and connected to Admin Panel");
@@ -143,7 +142,6 @@ async function loadItemsTable() {
     if (error) throw error;
 
     console.log(`[loadItemsTable] Rows fetched: ${items?.length ?? 0}`);
-    console.table(items);
 
     if (!items || items.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="no-data">No items found.</td></tr>';
@@ -179,8 +177,6 @@ async function loadItemsTable() {
           </td>
         </tr>`;
     }).join('');
-
-    console.log('[loadItemsTable] Table rendered successfully.');
   } catch (error) {
     console.error('[loadItemsTable] Error:', error);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading items. Please refresh.</td></tr>';
@@ -188,8 +184,8 @@ async function loadItemsTable() {
 }
 
 // ========== LOST REPORTS TABLE ==========
-// Shows reports where matched_item_id IS NULL (no AI match yet)
-// NOTE: matched_item_id is a UUID column — never compare it to "" (causes 400 Bad Request)
+// FIX: Shows reports where matched_item_id IS NULL (no AI match) AND status is NOT 'resolved'
+// This ensures rejected items (cleared matched_item_id, status back to 'pending') appear here
 async function loadLostReportsTable() {
   const tbody = document.getElementById('lostReportsTableBody');
   if (!tbody || !window.supabaseClient) return;
@@ -201,14 +197,14 @@ async function loadLostReportsTable() {
       .from('lost_reports')
       .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
       .is('matched_item_id', null)
+      .neq('status', 'resolved')         // FIX: exclude resolved records
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
     console.log(`[loadLostReportsTable] Rows fetched: ${data?.length ?? 0}`);
-    console.table(data);
 
-    if (data.length === 0) {
+    if (!data || data.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending lost item reports found.</td></tr>';
       return;
     }
@@ -235,8 +231,6 @@ async function loadLostReportsTable() {
           </td>
         </tr>`;
     }).join('');
-
-    console.log('[loadLostReportsTable] Table rendered successfully.');
   } catch (error) {
     console.error('[loadLostReportsTable] Error:', error);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
@@ -329,6 +323,9 @@ function closeLostReportModal() {
 }
 
 // ========== DASHBOARD STATS ==========
+// FIX: Total Items = approved items only (not claimed/pending admin review)
+//      Pending Reports = lost_reports with no match yet (matched_item_id IS NULL, not resolved)
+//      Resolved Matches = lost_reports with status = 'resolved'
 async function fetchDashboardStats() {
   if (!window.supabaseClient) return;
 
@@ -338,9 +335,19 @@ async function fetchDashboardStats() {
       { count: pendingReports },
       { count: resolvedReports },
     ] = await Promise.all([
-      window.supabaseClient.from('items').select('*', { count: 'exact', head: true }),
-      window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      window.supabaseClient.from('lost_reports').select('*', { count: 'exact', head: true }).eq('status', 'resolved'),
+      window.supabaseClient
+        .from('items')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'approved'),                  // Only approved (visible) items
+      window.supabaseClient
+        .from('lost_reports')
+        .select('*', { count: 'exact', head: true })
+        .is('matched_item_id', null)                // No AI match yet
+        .neq('status', 'resolved'),                 // Not already resolved
+      window.supabaseClient
+        .from('lost_reports')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'resolved'),
     ]);
 
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? 0; };
@@ -354,7 +361,13 @@ async function fetchDashboardStats() {
   }
 }
 
+// updateDashboardStats is now just an alias for fetchDashboardStats (they were duplicated)
+async function updateDashboardStats() {
+  await fetchDashboardStats();
+}
+
 // ========== RESOLVED TRANSACTIONS TABLE ==========
+// FIX: Query lost_reports with status='resolved' and join items via matched_item_id
 async function loadResolvedTransactionsTable() {
   const tbody = document.getElementById('resolvedTransactionsTableBody');
   if (!tbody || !window.supabaseClient) return;
@@ -362,24 +375,48 @@ async function loadResolvedTransactionsTable() {
   tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading resolved transactions...</td></tr>';
 
   try {
-    const { data: reports, error } = await window.supabaseClient
+    // FIX: Use matched_item_id for the foreign key join, not a direct items() join
+    // Supabase foreign key join only works if the FK is set up in the schema.
+    // We fetch lost_reports first, then batch-fetch the matched items separately.
+    const { data: reports, error: reportsError } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, created_at, resolved_at, items(display_name, image_url)')
+      .select('id, student_name, created_at, resolved_at, matched_item_id')
       .eq('status', 'resolved')
       .order('resolved_at', { ascending: false });
 
-    if (error) throw error;
+    if (reportsError) throw reportsError;
 
     if (!reports || reports.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="no-data">No resolved transactions found.</td></tr>';
       return;
     }
 
+    // Collect unique item IDs that are not null
+    const itemIds = [...new Set(reports.map(r => r.matched_item_id).filter(Boolean))];
+
+    // Fetch all matched items in one query
+    let itemsMap = {};
+    if (itemIds.length > 0) {
+      const { data: itemsData, error: itemsError } = await window.supabaseClient
+        .from('items')
+        .select('id, display_name, image_url')
+        .in('id', itemIds);
+
+      if (itemsError) throw itemsError;
+
+      itemsData?.forEach(item => {
+        itemsMap[item.id] = item;
+      });
+    }
+
     const rows = reports.map(report => {
-      const matchedItem = Array.isArray(report.items) ? report.items[0] : report.items;
-      const itemImageUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : FALLBACK_ITEM_IMAGE;
+      const matchedItem = report.matched_item_id ? itemsMap[report.matched_item_id] : null;
+      const itemImageUrl = matchedItem?.image_url
+        ? getSupabasePublicUrl(matchedItem.image_url)
+        : FALLBACK_ITEM_IMAGE;
       const safeItemImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
       const safeItemName = String(matchedItem?.display_name || 'Item image').replace(/'/g, "\\'");
+
       const dateReported = report.created_at
         ? new Date(report.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : 'N/A';
@@ -402,6 +439,7 @@ async function loadResolvedTransactionsTable() {
     });
 
     tbody.innerHTML = rows.join('');
+    console.log(`[loadResolvedTransactionsTable] Rendered ${rows.length} rows.`);
   } catch (err) {
     console.error('[loadResolvedTransactionsTable] Error:', err);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading resolved transactions.</td></tr>';
@@ -415,72 +453,88 @@ async function loadVerificationHub() {
   try {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1, items(*)')
+      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false });
 
     if (error) throw error;
 
     console.log(`[loadVerificationHub] Rows fetched: ${reports?.length ?? 0}`);
-    console.log('[loadVerificationHub] matched_item_id values:', reports?.map(report => report.matched_item_id));
 
     if (!reports || reports.length === 0) {
       verificationContainer.innerHTML = '<p class="no-data">No reports to verify.</p>';
       return;
     }
 
-    const cards = await Promise.all(
-      reports.map(async report => {
-        const matchedItem = Array.isArray(report.items) ? report.items[0] : report.items;
+    // Collect item IDs and fetch them in one query
+    const itemIds = [...new Set(reports.map(r => r.matched_item_id).filter(Boolean))];
+    let itemsMap = {};
 
-        if (matchedItem && matchedItem.status && matchedItem.status !== 'approved') return null;
+    if (itemIds.length > 0) {
+      const { data: itemsData, error: itemsError } = await window.supabaseClient
+        .from('items')
+        .select('id, display_name, name, image_url, status')
+        .in('id', itemIds);
 
-        const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
-        const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+      if (itemsError) throw itemsError;
+      itemsData?.forEach(item => { itemsMap[item.id] = item; });
+    }
 
-        return `
-          <div class="verification-card">
-            <div class="verification-header">
-              <h3>${report.student_name || 'Unknown'}</h3>
-              <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
-            </div>
-            <div class="verification-body">
-              <div class="verification-images">
-                <div class="image-section">
-                  <h4>Student Reference Photo</h4>
-                  ${refImgUrl ? `<img src="${refImgUrl}" alt="Reference" onclick="openLightbox('${refImgUrl}')">` : '<p class="no-image">No image provided</p>'}
-                </div>
-                <div class="verification-vs-badge" aria-hidden="true">VS</div>
-                <div class="image-section">
-                  <h4>Office Item Image</h4>
-                  ${itemImgUrl ? `<img src="${itemImgUrl}" alt="Item" onclick="openLightbox('${itemImgUrl}')">` : '<p class="no-image">No matched item</p>'}
-                </div>
+    const cards = reports.map(report => {
+      const matchedItem = report.matched_item_id ? itemsMap[report.matched_item_id] : null;
+
+      // Only show cards where the matched item is approved (ready to be claimed)
+      if (matchedItem && matchedItem.status && matchedItem.status !== 'approved') return null;
+
+      const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
+      const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+
+      return `
+        <div class="verification-card">
+          <div class="verification-header">
+            <h3>${report.student_name || 'Unknown'}</h3>
+            <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
+          </div>
+          <div class="verification-body">
+            <div class="verification-images">
+              <div class="image-section">
+                <h4>Student Reference Photo</h4>
+                ${refImgUrl ? `<img src="${refImgUrl}" alt="Reference" onclick="openLightbox('${refImgUrl}')">` : '<p class="no-image">No image provided</p>'}
               </div>
-              <div class="verification-details">
-                <p><strong>Description:</strong> ${report.item_description || 'N/A'}</p>
-                <p><strong>Location:</strong> ${report.last_location || 'Not specified'}</p>
-                <p><strong>Match Score:</strong> <span class="match-score">${report.match_score ?? 0}%</span></p>
-                ${matchedItem ? `<p><strong>Matched Item:</strong> ${matchedItem.display_name || matchedItem.name || 'N/A'}</p>` : ''}
+              <div class="verification-vs-badge" aria-hidden="true">VS</div>
+              <div class="image-section">
+                <h4>Office Item Image</h4>
+                ${itemImgUrl ? `<img src="${itemImgUrl}" alt="Item" onclick="openLightbox('${itemImgUrl}')">` : '<p class="no-image">No matched item</p>'}
               </div>
             </div>
-            <div class="verification-actions">
-              <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
-              <button class="btn btn-danger" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
+            <div class="verification-details">
+              <p><strong>Description:</strong> ${report.item_description || 'N/A'}</p>
+              <p><strong>Location:</strong> ${report.last_location || 'Not specified'}</p>
+              <p><strong>Match Score:</strong> <span class="match-score">${report.match_score ?? 0}%</span></p>
+              ${matchedItem ? `<p><strong>Matched Item:</strong> ${matchedItem.display_name || matchedItem.name || 'N/A'}</p>` : ''}
             </div>
-          </div>`;
-      })
-    );
+          </div>
+          <div class="verification-actions">
+            <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
+            <button class="btn btn-danger" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
+          </div>
+        </div>`;
+    });
 
     const filteredCards = cards.filter(c => c !== null);
-    verificationContainer.innerHTML = filteredCards.join('');
+    verificationContainer.innerHTML = filteredCards.length > 0
+      ? filteredCards.join('')
+      : '<p class="no-data">No reports to verify.</p>';
   } catch (error) {
     console.error('[loadVerificationHub] Error:', error);
     verificationContainer.innerHTML = '<p class="error">Error loading reports. Please refresh.</p>';
   }
 }
 
-// ========== MATCH APPROVAL / REJECTION ==========
+// ========== MATCH APPROVAL ==========
+// FIX: Sets lost_reports.status = 'resolved' (not 'matched') and items.status = 'claimed'
+//      resolved_at timestamp is set so Resolved Transactions table shows the claimed date
 async function approveMatch(reportId, itemId, triggerButton = null) {
   if (!window.supabaseClient) return;
 
@@ -493,29 +547,32 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
   try {
     setVerificationActionLoading(triggerButton, true, 'Approving...');
 
-    // Update lost_reports: Set status = 'resolved' and resolved_at = current timestamp
-    const reportUpdate = await window.supabaseClient
+    // Step 1: Mark the lost_report as 'resolved' with a timestamp
+    const { error: reportError } = await window.supabaseClient
       .from('lost_reports')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .update({
+        status: 'resolved',
+        resolved_at: new Date().toISOString(),
+      })
       .eq('id', reportId);
 
-    if (reportUpdate.error) throw reportUpdate.error;
+    if (reportError) throw reportError;
 
-    // Update items: Set status = 'claimed'
-    const itemUpdate = await window.supabaseClient
+    // Step 2: Mark the matched item as 'claimed'
+    const { error: itemError } = await window.supabaseClient
       .from('items')
       .update({ status: 'claimed' })
       .eq('id', resolvedItemId);
 
-    if (itemUpdate.error) throw itemUpdate.error;
+    if (itemError) throw itemError;
 
-    // Refresh UI in the specified order
+    // Step 3: Refresh all views
     await updateDashboardStats();
     await loadVerificationHub();
     await loadResolvedTransactionsTable();
     await loadLostReportsTable();
 
-    showAdminToast('Match Approved! Item marked as claimed');
+    showAdminToast('Match Approved! Item marked as claimed.');
   } catch (error) {
     console.error('[approveMatch] Error:', error);
     showAdminToast('Error approving match: ' + error.message, 'error');
@@ -524,21 +581,27 @@ async function approveMatch(reportId, itemId, triggerButton = null) {
   }
 }
 
+// ========== MATCH REJECTION ==========
+// FIX: Clears matched_item_id and match_score, sets status back to 'pending'
+//      This causes the report to reappear in Lost Reports (matched_item_id IS NULL + not resolved)
 async function rejectMatch(reportId, triggerButton = null) {
   if (!window.supabaseClient) return;
 
   try {
     setVerificationActionLoading(triggerButton, true, 'Rejecting...');
 
-    // Update lost_reports: Set matched_item_id = null, match_score = 0, status = 'pending'
     const { error } = await window.supabaseClient
       .from('lost_reports')
-      .update({ matched_item_id: null, match_score: 0, status: 'pending' })
+      .update({
+        matched_item_id: null,
+        match_score: 0,
+        status: 'pending',
+      })
       .eq('id', reportId);
 
     if (error) throw error;
 
-    // Refresh UI in the specified order
+    // Refresh all views
     await updateDashboardStats();
     await loadVerificationHub();
     await loadResolvedTransactionsTable();
@@ -553,13 +616,11 @@ async function rejectMatch(reportId, triggerButton = null) {
   }
 }
 
-// ========== APPROVE / REJECT CLAIM ==========
+// ========== LEGACY CLAIM HANDLERS (kept for compatibility) ==========
 async function approveClaim(reportId, itemId) {
   try {
-    await commitApprovedMatch(reportId, itemId);
-    alert('✅ Claim approved! Item marked as CLAIMED.');
+    await approveMatch(reportId, itemId);
     closeClaimVerificationModal();
-    await refreshMatchViews();
   } catch (error) {
     console.error('[approveClaim] Error:', error);
     alert('Failed to approve claim: ' + error.message);
@@ -568,71 +629,11 @@ async function approveClaim(reportId, itemId) {
 
 async function rejectClaim(reportId) {
   try {
-    await commitRejectedMatch(reportId);
-
-    alert('❌ Claim rejected! Report moved back to Lost Items.');
+    await rejectMatch(reportId);
     closeClaimVerificationModal();
-    await refreshMatchViews();
   } catch (error) {
     console.error('[rejectClaim] Error:', error);
     alert('Failed to reject claim: ' + error.message);
-  }
-}
-
-async function commitApprovedMatch(reportId, itemId) {
-  const resolvedItemId = itemId || await resolveMatchedItemId(reportId);
-  const { error: reportError } = await window.supabaseClient
-    .from('lost_reports').update({ status: 'matched' }).eq('id', reportId);
-
-  if (reportError) throw reportError;
-
-  if (resolvedItemId) {
-    const { error: itemError } = await window.supabaseClient
-      .from('items').update({ status: 'claimed' }).eq('id', resolvedItemId);
-    if (itemError) throw itemError;
-  }
-}
-
-async function commitRejectedMatch(reportId) {
-  const { error } = await window.supabaseClient
-    .from('lost_reports').update({ matched_item_id: null, match_score: 0, status: 'pending' }).eq('id', reportId);
-
-  if (error) throw error;
-}
-
-async function updateDashboardStats() {
-  if (!window.supabaseClient) return;
-  try {
-    // Total Items: Count all rows where status = 'approved'
-    const { count: totalItemsCount } = await window.supabaseClient
-      .from('items')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved');
-
-    // Pending Reports: Count all rows where status = 'pending'
-    const { count: pendingReportsCount } = await window.supabaseClient
-      .from('lost_reports')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
-
-    // Resolved Matches: Count all rows where status = 'resolved'
-    const { count: resolvedReportsCount } = await window.supabaseClient
-      .from('lost_reports')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'resolved');
-
-    const totalItemsEl = document.getElementById('totalItems');
-    if (totalItemsEl) totalItemsEl.textContent = totalItemsCount ?? 0;
-
-    const pendingReportsEl = document.getElementById('pendingReports');
-    if (pendingReportsEl) pendingReportsEl.textContent = pendingReportsCount ?? 0;
-
-    const matchedReportsEl = document.getElementById('matchedReports');
-    if (matchedReportsEl) matchedReportsEl.textContent = resolvedReportsCount ?? 0;
-
-    console.log('[updateDashboardStats] Total Items:', totalItemsCount, 'Pending Reports:', pendingReportsCount, 'Resolved Matches:', resolvedReportsCount);
-  } catch (err) {
-    console.error('[updateDashboardStats] Error:', err);
   }
 }
 
@@ -685,19 +686,20 @@ function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentS
   const modal = document.getElementById('itemActionModal');
   if (!modal) return;
 
-  const set = (id, val) => { const el = document.getElementById(id); if (el) el[id === 'modalItemImage' ? 'src' : 'value'] = val || ''; };
   const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || ''; };
 
   setText('modalTitle', 'Review Item: ' + itemName);
   setText('modalItemStatus', 'Status: ' + (currentStatus || 'pending').toUpperCase());
   document.getElementById('modalItemImage').src = imageUrl || '';
-  set('modalItemName', itemName);
-  set('modalItemDescription', aiDescription);
+
+  const nameEl = document.getElementById('modalItemName');
+  if (nameEl) nameEl.value = itemName || '';
+  const descEl = document.getElementById('modalItemDescription');
+  if (descEl) descEl.value = aiDescription || '';
 
   const dropdown = document.getElementById('itemStatusDropdown');
   if (dropdown) dropdown.value = currentStatus || 'pending';
 
-  // Reset delete button to fresh state
   const deleteBtn = document.getElementById('modalDeleteBtn');
   if (deleteBtn) {
     deleteBtn.disabled = false;
@@ -724,12 +726,12 @@ async function updateItemStatus() {
       .from('items').update({ status: newStatus }).eq('id', currentItemId);
     if (error) throw error;
 
-    alert('Item status updated to ' + newStatus.toUpperCase());
+    showAdminToast('Item status updated to ' + newStatus.toUpperCase());
     await loadItemsTable();
     closeItemActionModal();
   } catch (error) {
     console.error('[updateItemStatus] Error:', error);
-    alert('Error updating item: ' + error.message);
+    showAdminToast('Error updating item: ' + error.message, 'error');
   }
 }
 
@@ -741,7 +743,7 @@ async function deleteItem() {
 
   const deleteBtn = document.getElementById('modalDeleteBtn');
   const itemIdToDelete = currentItemId;
-  
+
   try {
     if (deleteBtn) {
       deleteBtn.disabled = true;
@@ -752,13 +754,13 @@ async function deleteItem() {
       .from('items').delete().eq('id', itemIdToDelete);
     if (error) throw error;
 
-    alert('✅ Item deleted successfully!');
+    showAdminToast('Item deleted successfully!');
     currentItemId = null;
     await loadItemsTable();
     closeItemActionModal();
   } catch (error) {
     console.error('[deleteItem] Error:', error);
-    alert('Error deleting item: ' + error.message);
+    showAdminToast('Error deleting item: ' + error.message, 'error');
   } finally {
     if (deleteBtn) {
       deleteBtn.disabled = false;
@@ -902,19 +904,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('=== Admin Dashboard DOMContentLoaded ===');
 
   try {
-    logoutBtn           = document.getElementById('logoutBtn');
-    hamburgerBtn        = document.getElementById('hamburgerBtn');
-    sidebarOverlay      = document.getElementById('sidebarOverlay');
-    sidebar             = document.getElementById('sidebar');
-    sidebarClose        = document.getElementById('sidebarClose');
-    refreshBtn          = document.getElementById('refreshBtn');
+    logoutBtn             = document.getElementById('logoutBtn');
+    hamburgerBtn          = document.getElementById('hamburgerBtn');
+    sidebarOverlay        = document.getElementById('sidebarOverlay');
+    sidebar               = document.getElementById('sidebar');
+    sidebarClose          = document.getElementById('sidebarClose');
+    refreshBtn            = document.getElementById('refreshBtn');
     verificationContainer = document.getElementById('verificationContainer');
 
     if (typeof checkAuthAndRedirect === 'function') await checkAuthAndRedirect();
     await loadUserProfile();
     initPage();
-    await fetchDashboardStats();
-    await updateDashboardStats();
+    await fetchDashboardStats();   // single unified stats call
     await loadVerificationHub();
 
     console.log('=== Admin Dashboard Initialization Complete ===');
@@ -923,7 +924,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// ========== LOST ITEM VIEW (placeholder) ==========
+// ========== LOST ITEM VIEW ==========
 function handleViewLostItem(button) {
   try {
     const reportPayload = button?.dataset?.report;
