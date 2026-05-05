@@ -391,7 +391,7 @@ async function searchManualMatchItems(query) {
     const { data, error } = await window.supabaseClient
       .from('items')
       .select('id, display_name, image_url, status')
-      .eq('status', 'pending')
+      .eq('status', 'approved')
       .ilike('display_name', `%${query}%`)
       .order('created_at', { ascending: false })
       .limit(6);
@@ -407,12 +407,14 @@ async function searchManualMatchItems(query) {
       const itemImageUrl = item.image_url ? getSupabasePublicUrl(item.image_url) : FALLBACK_ITEM_IMAGE;
       const safeItemName = String(item.display_name || 'Unknown Item').replace(/'/g, "\\'");
       const safeImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
+      const safeDescription = String(item.ai_description || 'No AI description available').replace(/'/g, "\\'");
 
       return `
-        <button type="button" class="manual-match-result" onclick="selectManualMatchItem('${item.id}', '${safeItemName}', '${safeImageUrl}')">
+        <button type="button" class="manual-match-result" onclick="selectManualMatchItem('${item.id}', '${safeItemName}', '${safeImageUrl}', '${safeDescription}')">
           <img src="${itemImageUrl}" alt="${item.display_name || 'Item'}" class="manual-match-result-thumb">
           <div class="manual-match-result-text">
             <strong>${item.display_name || 'Unknown Item'}</strong>
+            <span>${item.ai_description || 'No AI description available'}</span>
             <span>ID: ${item.id}</span>
           </div>
         </button>`;
@@ -423,8 +425,8 @@ async function searchManualMatchItems(query) {
   }
 }
 
-function selectManualMatchItem(itemId, itemName, imageUrl) {
-  currentManualMatchItem = { id: itemId, name: itemName, imageUrl };
+function selectManualMatchItem(itemId, itemName, imageUrl, itemDescription) {
+  currentManualMatchItem = { id: itemId, name: itemName, imageUrl, itemDescription };
 
   const resultsEl = document.getElementById('manualMatchResults');
   const selectionEl = document.getElementById('manualMatchSelection');
@@ -439,6 +441,8 @@ function selectManualMatchItem(itemId, itemName, imageUrl) {
   if (thumbnailEl) {
     thumbnailEl.src = imageUrl || FALLBACK_ITEM_IMAGE;
     thumbnailEl.alt = itemName || 'Selected item';
+    thumbnailEl.style.cursor = 'zoom-in';
+    thumbnailEl.onclick = () => openImageModal(imageUrl || FALLBACK_ITEM_IMAGE, itemName || 'Selected item');
   }
   if (selectionEl) selectionEl.hidden = false;
   if (assignBtn) assignBtn.disabled = false;
@@ -454,7 +458,7 @@ async function assignManualMatch() {
   try {
     if (assignBtn) {
       assignBtn.disabled = true;
-      assignBtn.textContent = 'Assigning...';
+      assignBtn.textContent = 'Linking...';
     }
 
     const [reportUpdate, itemUpdate] = await Promise.all([
@@ -462,21 +466,22 @@ async function assignManualMatch() {
         .from('lost_reports')
         .update({
           matched_item_id: currentManualMatchItem.id,
-          status: 'MATCHED',
+          status: 'resolved',
+          resolved_at: new Date().toISOString(),
+          released_by: currentAdminName,
         })
         .eq('id', currentManualMatchReport.id),
       window.supabaseClient
         .from('items')
-        .update({ status: 'CLAIMED' })
+        .update({ status: 'claimed' })
         .eq('id', currentManualMatchItem.id),
     ]);
 
     if (reportUpdate.error) throw reportUpdate.error;
     if (itemUpdate.error) throw itemUpdate.error;
 
-    showAdminToast('Manual match assigned successfully.');
+    showAdminToast('Link & Resolve completed successfully.');
     await updateDashboardStats();
-    await loadVerificationHub();
     await loadResolvedTransactionsTable();
     await loadLostReportsTable();
     await loadItemsTable();
@@ -485,7 +490,7 @@ async function assignManualMatch() {
     console.error('[assignManualMatch] Error:', error);
     showAdminToast('Error assigning manual match: ' + error.message, 'error');
   } finally {
-    if (assignBtn) assignBtn.textContent = 'Assign Match';
+    if (assignBtn) assignBtn.textContent = 'Link & Resolve';
   }
 }
 

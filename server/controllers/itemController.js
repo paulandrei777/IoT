@@ -242,10 +242,17 @@ const getLostReports = async (req, res) => {
 
 const approveMatch = async (req, res) => {
   const { id } = req.params;
+  const { matched_item_id, item_id, released_by } = req.body || {};
+  const selectedItemId = item_id || matched_item_id || null;
   try {
     const { data, error } = await supabase
       .from('lost_reports')
-      .update({ status: 'matched' })
+      .update({
+        status: 'resolved',
+        matched_item_id: selectedItemId,
+        resolved_at: new Date().toISOString(),
+        released_by: released_by || 'Admin',
+      })
       .eq('id', id)
       .eq('status', 'pending')
       .select();
@@ -253,6 +260,15 @@ const approveMatch = async (req, res) => {
     if (error) throw error;
     if (!data || data.length === 0) {
       return res.status(404).json({ error: 'Report not found or already processed' });
+    }
+
+    if (selectedItemId) {
+      const { error: itemError } = await supabase
+        .from('items')
+        .update({ status: 'claimed' })
+        .eq('id', selectedItemId);
+
+      if (itemError) throw itemError;
     }
 
     res.json({ message: 'Match approved successfully', report: data[0] });
@@ -267,7 +283,7 @@ const rejectMatch = async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('lost_reports')
-      .update({ status: 'searching', matched_item_id: null, match_score: 0 })
+      .update({ status: 'pending', matched_item_id: null, match_score: 0 })
       .eq('id', id)
       .eq('status', 'pending')
       .select();
