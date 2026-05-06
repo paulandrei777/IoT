@@ -1,10 +1,14 @@
 // server/controllers/itemController.js
 const supabase = require('../config/supabaseClient');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { Resend } = require('resend');
 
 const fetchFn = global.fetch || (() => {
   throw new Error('Fetch is not available in this Node.js runtime. Please use Node 18+ or install a compatible fetch implementation.');
 });
+
+const resendClient = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const RESEND_FROM_EMAIL = 'onboarding@resend.dev';
 
 if (!process.env.GEMINI_API_KEY) {
   throw new Error('GEMINI_API_KEY is missing in .env');
@@ -78,6 +82,13 @@ const extractAiText = (response) => {
 
   return textPieces.join(' ').trim();
 };
+
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 const extractJsonFromText = (text) => {
   if (!text || typeof text !== 'string') return null;
@@ -237,6 +248,92 @@ const getLostReports = async (req, res) => {
   } catch (err) {
     console.error('[getLostReports] Error', err);
     res.status(500).json({ error: err.message || 'Failed to fetch lost reports' });
+  }
+};
+
+const sendCustomNotification = async (studentEmail, studentName, customMessage) => {
+  const recipientEmail = String(studentEmail || '').trim();
+  const recipientName = String(studentName || 'Student').trim() || 'Student';
+  const messageBody = String(customMessage || '').trim();
+
+  if (!resendClient) {
+    throw new Error('RESEND_API_KEY is missing in .env');
+  }
+
+  if (!recipientEmail) {
+    throw new Error('studentEmail is required');
+  }
+
+  if (!messageBody) {
+    throw new Error('customMessage is required');
+  }
+
+  const safeMessageHtml = escapeHtml(messageBody).replace(/\n/g, '<br>');
+  const safeRecipientName = escapeHtml(recipientName);
+
+  const { data, error } = await resendClient.emails.send({
+    from: RESEND_FROM_EMAIL,
+    to: recipientEmail,
+    subject: 'Update from DominiFinds',
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
+        <h2 style="margin: 0 0 12px; color: #0f172a;">Hello ${safeRecipientName},</h2>
+        <p style="margin: 0 0 16px;">You have a new update from the DominiFinds admin team.</p>
+        <div style="padding: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px;">
+          ${safeMessageHtml}
+        </div>
+        <p style="margin: 16px 0 0; color: #475569; font-size: 0.95rem;">This message was sent from the DominiFinds Verification Hub.</p>
+      </div>
+    `,
+    text: `Hello ${recipientName},\n\n${messageBody}\n\nThis message was sent from the DominiFinds Verification Hub.`,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+};
+
+const sendStudentUpdate = async (req, res) => {
+  const { id } = req.params;
+  const { studentEmail, studentName, customMessage } = req.body || {};
+
+  try {
+    let reportEmail = studentEmail;
+    let reportName = studentName;
+
+    if (id) {
+      const { data: report, error: reportError } = await supabase
+        .from('lost_reports')
+        .select('student_email, student_name, status')
+        .eq('id', id)
+        .single();
+
+      if (reportError) throw reportError;
+      if (!report) {
+        return res.status(404).json({ error: 'Report not found' });
+      }
+
+      if ((report.status || '').toLowerCase() !== 'pending') {
+        return res.status(400).json({ error: 'Only pending reports can receive an update' });
+      }
+
+      reportEmail = report.student_email || reportEmail;
+      reportName = report.student_name || reportName;
+    }
+
+    const emailResult = await sendCustomNotification(reportEmail, reportName, customMessage);
+
+    return res.json({
+      message: 'Notification email sent successfully.',
+      studentEmail: reportEmail,
+      studentName: reportName || 'Student',
+      email: emailResult,
+    });
+  } catch (err) {
+    console.error('[sendStudentUpdate] Error', err);
+    return res.status(500).json({ error: err.message || 'Failed to send notification email' });
   }
 };
 
@@ -706,6 +803,8 @@ module.exports = {
   getLostReports,
   approveMatch,
   rejectMatch,
+  sendCustomNotification,
+  sendStudentUpdate,
   approveItem,
   rejectItem,
   claimItem,

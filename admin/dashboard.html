@@ -256,24 +256,37 @@
       <button class="modal-close" onclick="closeClaimVerificationModal()">&times;</button>
       <div class="modal-header">
         <h3 id="claimVerificationTitle">Verify Claim</h3>
+        <p class="modal-subtitle">Student Name: <span id="claimStudentName">N/A</span></p>
         <p class="modal-subtitle">Student Email: <span id="claimStudentEmail">N/A</span></p>
       </div>
       <div class="modal-body">
-        <p style="color: var(--gray-700); margin-bottom: 16px;">Please review the side-by-side images and decide whether to approve or reject this match.</p>
+        <p class="claim-modal-note">Please review the side-by-side images and decide whether to approve or reject this match.</p>
         <div style="display: flex; gap: 16px; margin-bottom: 20px;">
           <div style="flex: 1; text-align: center;">
-            <p style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px;">Item Photo</p>
+            <p class="claim-photo-label">Item Photo</p>
             <img id="claimItemImage" src="" alt="Item" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;">
           </div>
           <div style="flex: 1; text-align: center;">
-            <p style="font-weight: 600; color: var(--gray-800); margin-bottom: 8px;">Student Photo</p>
+            <p class="claim-photo-label">Student Photo</p>
             <img id="claimStudentImage" src="" alt="Reference" style="max-width: 100%; max-height: 200px; border-radius: 8px; object-fit: cover;">
+          </div>
+        </div>
+        <div id="claimNotificationPanel" class="notification-panel" hidden>
+          <div class="notification-panel-header">
+            <h4>Send Email Update</h4>
+            <p>Send a message to the student without changing the claim status yet.</p>
+          </div>
+          <textarea id="claimNotificationMessage" class="modal-textarea notification-textarea" rows="5" placeholder="Type your message to the student here..."></textarea>
+          <div class="notification-panel-actions">
+            <button class="btn btn-secondary" type="button" onclick="toggleNotificationComposer('claim')">Cancel</button>
+            <button class="btn btn-primary btn-notify" type="button" id="claimSendUpdateBtn" onclick="sendNotificationUpdate('claim')">Send Update</button>
           </div>
         </div>
       </div>
       <div class="modal-actions" style="justify-content: space-between;">
         <button class="btn btn-danger" onclick="rejectClaim(document.getElementById('claimVerificationModal').dataset.reportId)">Reject Match</button>
         <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary btn-notify" onclick="toggleNotificationComposer('claim')">Notify Student</button>
           <button class="btn btn-secondary" onclick="closeClaimVerificationModal()">Cancel</button>
           <button class="btn btn-success" onclick="approveClaim(document.getElementById('claimVerificationModal').dataset.reportId, document.getElementById('claimVerificationModal').dataset.itemId)">Approve Claim</button>
         </div>

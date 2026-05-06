@@ -243,6 +243,101 @@ async function loadLostReportsTable() {
   }
 }
 
+function getNotificationModalElements(modalKey) {
+  const modalId = modalKey === 'claim' ? 'claimVerificationModal' : 'lostReportModal';
+  return {
+    modal: document.getElementById(modalId),
+    panel: document.getElementById(`${modalKey}NotificationPanel`),
+    textarea: document.getElementById(`${modalKey}NotificationMessage`),
+    sendBtn: document.getElementById(`${modalKey}SendUpdateBtn`),
+  };
+}
+
+function resetNotificationComposer(modalKey) {
+  const { panel, textarea, sendBtn } = getNotificationModalElements(modalKey);
+
+  if (panel) panel.hidden = true;
+  if (textarea) {
+    textarea.value = '';
+    textarea.disabled = false;
+  }
+  if (sendBtn) {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send Update';
+  }
+}
+
+function toggleNotificationComposer(modalKey) {
+  const { panel, textarea } = getNotificationModalElements(modalKey);
+  if (!panel) return;
+
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) {
+    textarea?.focus();
+  }
+}
+
+async function sendNotificationUpdate(modalKey) {
+  const { modal, textarea, sendBtn } = getNotificationModalElements(modalKey);
+  const reportId = modal?.dataset?.reportId;
+  const studentEmail = modal?.dataset?.studentEmail;
+  const studentName = modal?.dataset?.studentName || '';
+  const customMessage = textarea?.value?.trim() || '';
+
+  if (!reportId) {
+    showAdminToast('Unable to send update: report context is missing.', 'error');
+    return;
+  }
+
+  if (!studentEmail) {
+    showAdminToast('Unable to send update: student email is missing.', 'error');
+    return;
+  }
+
+  if (!customMessage) {
+    showAdminToast('Please type a message before sending the update.', 'error');
+    return;
+  }
+
+  try {
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending...';
+    }
+
+    if (textarea) textarea.disabled = true;
+
+    const response = await fetch(`/api/items/lost-reports/${reportId}/send-update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        studentEmail,
+        studentName,
+        customMessage,
+      }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to send notification email');
+    }
+
+    showAdminToast(payload.message || 'Student update sent successfully.');
+    resetNotificationComposer(modalKey);
+  } catch (error) {
+    console.error('[sendNotificationUpdate] Error:', error);
+    showAdminToast('Error sending update: ' + error.message, 'error');
+    if (textarea) textarea.disabled = false;
+  } finally {
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send Update';
+    }
+  }
+}
+
 function ensureLostReportModal() {
   let modal = document.getElementById('lostReportModal');
   if (modal) return modal;
@@ -294,8 +389,20 @@ function ensureLostReportModal() {
           </div>
         </div>
       </div>
+      <div id="lostNotificationPanel" class="notification-panel" hidden>
+        <div class="notification-panel-header">
+          <h4>Send Email Update</h4>
+          <p>Send a note to the student without changing the report status.</p>
+        </div>
+        <textarea id="lostNotificationMessage" class="modal-textarea notification-textarea" rows="5" placeholder="Type your message to the student here..."></textarea>
+        <div class="notification-panel-actions">
+          <button class="btn btn-secondary" type="button" onclick="toggleNotificationComposer('lost')">Cancel</button>
+          <button class="btn btn-primary btn-notify" type="button" id="lostSendUpdateBtn" onclick="sendNotificationUpdate('lost')">Send Update</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeLostReportModal()">Close</button>
+        <button class="btn btn-primary btn-notify" onclick="toggleNotificationComposer('lost')">Notify Student</button>
         <button class="btn btn-success" id="assignMatchBtn" onclick="assignManualMatch()" disabled>Assign Match</button>
       </div>
     </div>`;
@@ -528,8 +635,13 @@ function openLostReportModal(report) {
   setText('lostReportModalStatus', (report.status || 'pending').toUpperCase());
   setText('lostReportModalMatchedItemId', report.matched_item_id || 'None');
 
+  modal.dataset.reportId = report.id || '';
+  modal.dataset.studentEmail = report.student_email || '';
+  modal.dataset.studentName = report.student_name || '';
+
   currentManualMatchReport = report;
   resetManualMatchState();
+  resetNotificationComposer('lost');
   bindManualMatchControls();
 
   modal.style.display = 'flex';
@@ -538,6 +650,7 @@ function openLostReportModal(report) {
 function closeLostReportModal() {
   const modal = document.getElementById('lostReportModal');
   if (modal) modal.style.display = 'none';
+  resetNotificationComposer('lost');
   currentManualMatchReport = null;
   currentManualMatchItem = null;
 }
@@ -1001,15 +1114,20 @@ async function deleteItem() {
 }
 
 // ========== CLAIM VERIFICATION MODAL ==========
-function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl = '', studentImageUrl = '') {
+function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, itemImageUrl = '', studentImageUrl = '', studentName = '') {
   const modal = document.getElementById('claimVerificationModal');
   if (!modal) return;
 
   modal.dataset.reportId = reportId;
   modal.dataset.itemId = itemId;
+  modal.dataset.studentEmail = studentEmail || '';
+  modal.dataset.studentName = studentName || '';
 
   const title = document.getElementById('claimVerificationTitle');
   if (title) title.textContent = `Verify Claim — Match Score: ${matchScore}%`;
+
+  const nameDisplay = document.getElementById('claimStudentName');
+  if (nameDisplay) nameDisplay.textContent = studentName || 'N/A';
 
   const emailDisplay = document.getElementById('claimStudentEmail');
   if (emailDisplay) emailDisplay.textContent = studentEmail || 'N/A';
@@ -1026,12 +1144,15 @@ function openClaimVerificationModal(reportId, itemId, matchScore, studentEmail, 
     studentImageEl.onerror = () => { studentImageEl.onerror = null; studentImageEl.src = FALLBACK_ITEM_IMAGE; };
   }
 
+  resetNotificationComposer('claim');
+
   modal.style.display = 'flex';
 }
 
 function closeClaimVerificationModal() {
   const modal = document.getElementById('claimVerificationModal');
   if (modal) modal.style.display = 'none';
+  resetNotificationComposer('claim');
 }
 
 // ========== LIGHTBOX ==========
@@ -1185,6 +1306,7 @@ function handleVerifyClaim(button) {
     button.dataset.matchScore,
     button.dataset.studentEmail,
     button.dataset.itemImageUrl,
-    button.dataset.studentImageUrl
+    button.dataset.studentImageUrl,
+    button.dataset.studentName
   );
 }
