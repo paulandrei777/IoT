@@ -835,11 +835,18 @@ async function loadVerificationHub() {
       // Only show cards where the matched item is approved (ready to be claimed)
       if (matchedItem && matchedItem.status && matchedItem.status !== 'approved') return null;
 
+      // Validate email presence
+      if (!report.student_email) {
+        console.warn(`[loadVerificationHub] Report ${report.id} missing student_email. Skipping card.`);
+        showAdminToast(`Report ${report.student_name || 'Unknown'} missing email. Cannot send notifications.`, 'error');
+        return null;
+      }
+
       const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
       const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
 
       return `
-        <div class="verification-card">
+        <div class="verification-card" data-report-id="${report.id}" data-student-email="${report.student_email}" data-student-name="${(report.student_name || '').replace(/"/g, '&quot;')}">
           <div class="verification-header">
             <h3>${report.student_name || 'Unknown'}</h3>
             <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
@@ -857,14 +864,27 @@ async function loadVerificationHub() {
               </div>
             </div>
             <div class="verification-details">
+              <p><strong>Student Email:</strong> <span class="student-email">${report.student_email}</span></p>
               <p><strong>Description:</strong> ${report.item_description || 'N/A'}</p>
               <p><strong>Location:</strong> ${report.last_location || 'Not specified'}</p>
               <p><strong>Match Score:</strong> <span class="match-score">${report.match_score ?? 0}%</span></p>
               ${matchedItem ? `<p><strong>Matched Item:</strong> ${matchedItem.display_name || matchedItem.name || 'N/A'}</p>` : ''}
             </div>
           </div>
+          <div class="verification-notification-panel" hidden>
+            <div class="notification-panel-header">
+              <h4>Send Email Update</h4>
+              <p>Send a message to the student without changing the match status.</p>
+            </div>
+            <textarea class="modal-textarea notification-textarea verification-notification-message" rows="5" placeholder="Type your message to the student here..."></textarea>
+            <div class="notification-panel-actions">
+              <button class="btn btn-secondary" type="button" onclick="toggleVerificationNotificationPanel(this)">Cancel</button>
+              <button class="btn btn-primary btn-notify" type="button" onclick="sendVerificationNotification(this)">Send Update</button>
+            </div>
+          </div>
           <div class="verification-actions">
             <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
+            <button class="btn btn-primary btn-notify" onclick="toggleVerificationNotificationPanel(this)">Notify Student</button>
             <button class="btn btn-danger" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
           </div>
         </div>`;
@@ -877,6 +897,74 @@ async function loadVerificationHub() {
   } catch (error) {
     console.error('[loadVerificationHub] Error:', error);
     verificationContainer.innerHTML = '<p class="error">Error loading reports. Please refresh.</p>';
+  }
+}
+
+// ========== VERIFICATION NOTIFICATION HANDLERS ==========
+function toggleVerificationNotificationPanel(triggerBtn) {
+  const card = triggerBtn.closest('.verification-card');
+  if (!card) return;
+
+  const panel = card.querySelector('.verification-notification-panel');
+  const textarea = card.querySelector('.verification-notification-message');
+
+  if (!panel) return;
+
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden && textarea) {
+    textarea.focus();
+  }
+}
+
+async function sendVerificationNotification(sendBtn) {
+  const card = sendBtn.closest('.verification-card');
+  if (!card) return;
+
+  const reportId = card.dataset.reportId;
+  const studentEmail = card.dataset.studentEmail;
+  const studentName = card.dataset.studentName || '';
+  const textarea = card.querySelector('.verification-notification-message');
+  const customMessage = textarea?.value?.trim() || '';
+
+  if (!reportId || !studentEmail) {
+    showAdminToast('Unable to send: missing report or email data.', 'error');
+    return;
+  }
+
+  if (!customMessage) {
+    showAdminToast('Please type a message before sending the update.', 'error');
+    return;
+  }
+
+  try {
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
+    if (textarea) textarea.disabled = true;
+
+    const response = await fetch(`/api/items/lost-reports/${reportId}/send-update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentEmail, studentName, customMessage }),
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || 'Failed to send notification email');
+    }
+
+    showAdminToast(payload.message || 'Student update sent successfully.');
+    const panel = card.querySelector('.verification-notification-panel');
+    if (panel) {
+      panel.hidden = true;
+      if (textarea) textarea.value = '';
+    }
+  } catch (error) {
+    console.error('[sendVerificationNotification] Error:', error);
+    showAdminToast('Error sending update: ' + error.message, 'error');
+    if (textarea) textarea.disabled = false;
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send Update';
   }
 }
 

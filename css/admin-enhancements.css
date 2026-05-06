@@ -659,6 +659,50 @@
   border-radius: 10px;
 }
 
+/* Verification Hub Card Notification Panel */
+.verification-card .student-email {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.verification-card .verification-notification-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.94) 100%);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+.verification-card .verification-notification-panel .notification-panel-header {
+  margin-bottom: 12px;
+}
+
+.verification-card .verification-notification-panel .notification-panel-header h4 {
+  margin: 0 0 4px 0;
+  color: #f8fafc;
+  font-size: 0.95rem;
+}
+
+.verification-card .verification-notification-panel .notification-panel-header p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
+.verification-card .verification-notification-message {
+  width: 100%;
+  min-height: 100px;
+  background: rgba(2, 6, 23, 0.7);
+  border: 1px solid rgba(96, 165, 250, 0.22);
+  color: #f8fafc;
+  margin-bottom: 12px;
+}
+
+.verification-card .verification-notification-message:focus {
+  border-color: rgba(96, 165, 250, 0.6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
