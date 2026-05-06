@@ -361,6 +361,7 @@ function ensureLostReportModal() {
         </div>
         <div class="modal-fields">
           <p><strong>Student Name:</strong> <span id="lostReportModalStudentName"></span></p>
+          <p><strong>Student Email:</strong> <span id="lostReportModalStudentEmail"></span></p>
           <p><strong>Description:</strong> <span id="lostReportModalDescription"></span></p>
           <p><strong>Date:</strong> <span id="lostReportModalDate"></span></p>
           <p><strong>Location:</strong> <span id="lostReportModalLocation"></span></p>
@@ -601,8 +602,28 @@ async function assignManualMatch() {
   }
 }
 
-function openLostReportModal(report) {
+async function openLostReportModal(report) {
   const modal = ensureLostReportModal();
+  // If report is minimal, fetch full record (including student_email) by id
+  if (report && report.id && window.supabaseClient) {
+    try {
+      const { data: fresh, error: fetchErr } = await window.supabaseClient
+        .from('lost_reports')
+        .select('student_email, student_name')
+        .eq('id', report.id)
+        .single();
+
+      if (!fetchErr && fresh) {
+        report.student_email = fresh.student_email;
+        report.student_name = fresh.student_name || report.student_name;
+      } else if (fetchErr) {
+        console.warn('[openLostReportModal] Could not fetch fresh report data:', fetchErr.message || fetchErr);
+      }
+    } catch (err) {
+      console.warn('[openLostReportModal] Exception fetching report:', err);
+    }
+  }
+
   const reportDate = report.reportDate || new Date(report.created_at).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   });
@@ -629,15 +650,20 @@ function openLostReportModal(report) {
   };
 
   setText('lostReportModalStudentName', report.student_name);
+  setText('lostReportModalStudentEmail', report.student_email || 'N/A');
   setText('lostReportModalDescription', report.item_description || 'N/A');
   setText('lostReportModalDate', reportDate);
   setText('lostReportModalLocation', report.last_location || 'Not specified');
   setText('lostReportModalStatus', (report.status || 'pending').toUpperCase());
   setText('lostReportModalMatchedItemId', report.matched_item_id || 'None');
 
+  // store for Send Update flow
   modal.dataset.reportId = report.id || '';
   modal.dataset.studentEmail = report.student_email || '';
   modal.dataset.studentName = report.student_name || '';
+  // also expose globally for quick inspection
+  window.currentReportEmail = report.student_email || '';
+  console.log('Current Report Email:', window.currentReportEmail);
 
   currentManualMatchReport = report;
   resetManualMatchState();
