@@ -223,9 +223,9 @@ async function loadLostReportsTable() {
   try {
     const { data, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id')
-      .is('matched_item_id', null)
-      .neq('status', 'resolved')         // FIX: exclude resolved records
+      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id, match_score')
+      .or('matched_item_id.is.null,and(matched_item_id.not.is.null,match_score.lt.70)')
+      .neq('status', 'resolved')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -826,6 +826,7 @@ async function loadVerificationHub() {
       .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
+      .gte('match_score', 70)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
