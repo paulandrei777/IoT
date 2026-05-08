@@ -154,6 +154,8 @@ async function searchBlindMatch() {
     return;
   }
 
+  // notify user quickly that the search started
+  showToast('Searching for matches…', 'info');
   if (searchBtn) searchBtn.disabled = true;
   setStatusMessage(searchStatus, 'Searching for the best match...', 'info');
 
