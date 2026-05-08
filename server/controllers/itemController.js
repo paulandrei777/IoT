@@ -101,29 +101,67 @@ const extractJsonFromText = (text) => {
   }
 };
 
-const simpleSimilarityScore = (a, b) => {
-  const normalize = (value) => (value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
+const stopWords = new Set([
+  'the', 'and', 'or', 'a', 'an', 'of', 'to', 'in', 'on', 'at', 'for', 'with', 'has', 'have', 'had',
+  'is', 'are', 'was', 'were', 'be', 'been', 'it', 'its', 'this', 'that', 'these', 'those', 'item',
+  'thing', 'object', 'looks', 'like', 'very', 'really', 'just', 'only', 'as', 'by', 'from', 'my', 'your'
+]);
 
-  const tokensA = new Set(normalize(a));
-  const tokensB = new Set(normalize(b));
-  if (!tokensA.size || !tokensB.size) return 0;
+const normalizeText = (value) => String(value ?? '')
+  .toLowerCase()
+  .replace(/[^a-z0-9\s]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
-  const intersection = [...tokensA].filter(token => tokensB.has(token)).length;
-  return intersection / Math.max(tokensA.size, tokensB.size);
+const tokenize = (value) => normalizeText(value)
+  .split(' ')
+  .filter(token => token && !stopWords.has(token));
+
+const buildComparableText = (item) => [item.display_name || '', item.ai_description || ''].join(' ').trim();
+
+const simpleSimilarityScore = (studentDescription, itemText) => {
+  const studentNormalized = normalizeText(studentDescription);
+  const comparableNormalized = normalizeText(itemText);
+
+  if (!studentNormalized || !comparableNormalized) return 0;
+
+  const studentTokens = tokenize(studentDescription);
+  const comparableTokens = tokenize(itemText);
+  if (!studentTokens.length || !comparableTokens.length) return 0;
+
+  const comparableSet = new Set(comparableTokens);
+  const overlap = studentTokens.filter(token => comparableSet.has(token)).length;
+  const coverage = overlap / Math.max(studentTokens.length, 1);
+  const reverseCoverage = overlap / Math.max(comparableTokens.length, 1);
+
+  let score = (coverage * 0.65) + (reverseCoverage * 0.35);
+
+  if (studentNormalized.includes(comparableNormalized) || comparableNormalized.includes(studentNormalized)) {
+    score += 0.25;
+  }
+
+  return Math.max(0, Math.min(1, score));
 };
 
 const calculateMatchScoresWithGemini = async (studentDescription, items) => {
   const candidates = items.slice(0, 20).map(item => ({
     id: item.id,
-    ai_description: item.ai_description || '',
     display_name: item.display_name || '',
+    ai_description: item.ai_description || '',
+    combined_text: buildComparableText(item),
   }));
 
-  const prompt = `You are a lost-and-found matching assistant. Compare the student's description with the stored item descriptions. If there is ANY semantic match (e.g., 'blue wallet' matches 'wallet blue', 'red backpack' matches 'backpack with red color'), provide a match_score. Be lenient with matching - prioritize semantic similarity over exact wording.\n\nReturn ONLY valid JSON with a root object containing a 'matches' array. Each item must have: id, match_score (integer 0-100). No additional text or explanation.\n\nstudent_description:\n${studentDescription.trim()}\n\nitems:\n${JSON.stringify(candidates, null, 2)}`;
+  const prompt = `You are a lost-and-found matching assistant. Compare the student's description with each item's name and description.
+
+Score by semantic similarity, not exact wording. Treat equivalent phrases as matches across all item types. For example, if the student says "silver watch", that should match "silver wrist watch"; if they say "red backpack", that should match "bagpack/backpack" descriptions; if they mention a color, shape, brand, or distinctive feature, use that as strong evidence.
+
+Return ONLY valid JSON with a root object containing a 'matches' array. Each item must have: id, match_score (integer 0-100). No additional text or explanation.
+
+student_description:
+${studentDescription.trim()}
+
+items:
+${JSON.stringify(candidates, null, 2)}`;
 
   const requestPayload = {
     contents: [{
@@ -143,10 +181,15 @@ const calculateMatchScoresWithGemini = async (studentDescription, items) => {
     const parsed = extractJsonFromText(responseText);
 
     if (parsed && Array.isArray(parsed.matches)) {
-      return parsed.matches.map(match => ({
-        id: match.id,
-        match_score: Number(match.match_score) || 0,
-      }));
+      return parsed.matches.map(match => {
+        const candidate = candidates.find(item => item.id === match.id);
+        const heuristicScore = candidate ? Math.round(simpleSimilarityScore(studentDescription, candidate.combined_text) * 100) : 0;
+
+        return {
+          id: match.id,
+          match_score: Math.max(Number(match.match_score) || 0, heuristicScore),
+        };
+      });
     }
   } catch (err) {
     console.warn('[calculateMatchScoresWithGemini] AI similarity fallback:', err.message || err);
@@ -154,7 +197,7 @@ const calculateMatchScoresWithGemini = async (studentDescription, items) => {
 
   return candidates.map(item => ({
     id: item.id,
-    match_score: Math.round(simpleSimilarityScore(studentDescription, item.ai_description) * 100),
+    match_score: Math.round(simpleSimilarityScore(studentDescription, item.combined_text) * 100),
   }));
 };
 
