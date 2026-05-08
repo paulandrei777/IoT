@@ -71,26 +71,48 @@ function setVerificationActionLoading(buttonEl, isLoading, loadingText = '') {
 // DOM element references (populated on DOMContentLoaded)
 let logoutBtn, hamburgerBtn, sidebarOverlay, sidebar, sidebarClose, refreshBtn, verificationContainer;
 
+const DASHBOARD_SECTIONS = [
+  'verificationHubSection',
+  'itemManagementSection',
+  'lostReportsSection',
+  'resolvedTransactionsSection',
+];
+
 // ========== SECTION SWITCHING ==========
 function showSection(sectionId) {
   try {
     console.log('Switching to section:', sectionId);
 
-    document.querySelectorAll('.admin-section').forEach(s => (s.style.display = 'none'));
+    const targetSectionId = sectionId === 'verificationHub' ? 'verificationHubSection' : `${sectionId}Section`;
 
-    const targetSection = document.getElementById(sectionId + 'Section');
+    document.querySelectorAll('.dashboard-section').forEach(section => {
+      section.classList.add('hidden');
+      section.style.display = 'none';
+    });
+
+    const targetSection = document.getElementById(targetSectionId);
     if (targetSection) {
+      targetSection.classList.remove('hidden');
       targetSection.style.display = 'block';
     } else {
-      console.warn('Section not found:', sectionId);
+      console.warn('Section not found:', targetSectionId);
     }
 
-    document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+    document.querySelectorAll('.sidebar-nav .nav-link').forEach(link => {
+      link.classList.remove('active');
+      if (link.dataset.section === sectionId) link.classList.add('active');
+    });
     currentSection = sectionId;
+
+    if (sectionId === 'verificationHub' && targetSection) {
+      targetSection.classList.remove('hidden');
+      targetSection.style.display = 'block';
+    }
 
     if (sectionId === 'itemManagement') loadItemsTable();
     else if (sectionId === 'lostReports') loadLostReportsTable();
     else if (sectionId === 'resolvedTransactions') loadResolvedTransactionsTable();
+    else if (sectionId === 'verificationHub') loadVerificationHub();
 
     if (sidebar) sidebar.classList.remove('active');
     if (sidebarOverlay) sidebarOverlay.classList.remove('active');
@@ -1385,6 +1407,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof checkAuthAndRedirect === 'function') await checkAuthAndRedirect();
     await loadUserProfile();
     initPage();
+    showSection('verificationHub');
     await updateDashboardStats();   // single unified stats call
     await loadVerificationHub();
 

@@ -33,19 +33,19 @@
       </div>
 
       <nav class="sidebar-nav">
-        <a href="/admin/dashboard.html" class="nav-link active">
+        <a href="#" class="nav-link active" data-section="verificationHub" onclick="showSection('verificationHub'); return false;">
           <i class="fas fa-tachometer-alt"></i>
           <span>Verification Hub</span>
         </a>
-        <a href="#" class="nav-link" onclick="showSection('itemManagement')">
+        <a href="#" class="nav-link" data-section="itemManagement" onclick="showSection('itemManagement'); return false;">
           <i class="fas fa-box"></i>
           <span>Item Management</span>
         </a>
-        <a href="#" class="nav-link" onclick="showSection('lostReports')">
+        <a href="#" class="nav-link" data-section="lostReports" onclick="showSection('lostReports'); return false;">
           <i class="fas fa-search"></i>
           <span>Lost Reports</span>
         </a>
-        <a href="#" class="nav-link" onclick="showSection('resolvedTransactions')">
+        <a href="#" class="nav-link" data-section="resolvedTransactions" onclick="showSection('resolvedTransactions'); return false;">
           <i class="fas fa-archive"></i>
           <span>Resolved Transactions</span>
         </a>
@@ -107,7 +107,7 @@
       </section>
 
       <!-- Resolved Transactions Section -->
-      <section class="admin-section" id="resolvedTransactionsSection" style="display: none;">
+      <section class="admin-section dashboard-section hidden" id="resolvedTransactionsSection" style="display: none;">
         <h2>Resolved Transactions</h2>
         <p class="section-description">All resolved claims and completed transactions.</p>
         <div class="table-responsive">
@@ -140,7 +140,7 @@
       </div>
 
       <!-- Item Management Section -->
-      <section class="admin-section" id="itemManagementSection" style="display: none;">
+      <section class="admin-section dashboard-section hidden" id="itemManagementSection" style="display: none;">
         <h2>Item Management</h2>
         <p class="section-description">Review and manage lost items in the system.</p>
         <div class="table-responsive">
@@ -164,7 +164,7 @@
       </section>
 
       <!-- Lost Reports Section -->
-      <section class="admin-section" id="lostReportsSection" style="display: none;">
+      <section class="admin-section dashboard-section hidden" id="lostReportsSection" style="display: none;">
         <h2>Lost Reports</h2>
         <p class="section-description">Pending Lost Reports - student reports without a confirmed item match.</p>
         <div class="table-responsive">
@@ -187,7 +187,7 @@
         </div>
       </section>
 
-      <section class="admin-section verification-hub-section">
+      <section class="admin-section dashboard-section verification-hub-section" id="verificationHubSection">
         <h2>Match Verification Hub</h2>
         <p class="section-description">Pending AI Matches - Verify if these items belong to the students.</p>
         <div id="verificationContainer" class="verification-container"></div>
