@@ -12,8 +12,7 @@ body {
 }
 
 .admin-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  display: block;
   min-height: 100vh;
 }
 
@@ -176,6 +175,10 @@ body {
 }
 
 .admin-main {
+  box-sizing: border-box;
+  width: calc(100% - 280px);
+  max-width: calc(100% - 280px);
+  margin-left: 280px;
   padding: 24px;
   min-height: 100vh;
   overflow: auto;
@@ -932,18 +935,21 @@ body {
 }
 
 @media (max-width: 1024px) {
-  .admin-layout {
-    grid-template-columns: 250px minmax(0, 1fr);
-  }
-
   .sidebar {
     width: 250px;
+  }
+
+  .admin-main {
+    width: calc(100% - 250px);
+    max-width: calc(100% - 250px);
+    margin-left: 250px;
   }
 }
 
 @media (max-width: 768px) {
   .admin-layout {
     display: flex;
+    flex-direction: column;
   }
 
   .mobile-header,
@@ -968,6 +974,8 @@ body {
   }
 
   .admin-main {
+    width: 100%;
+    max-width: 100%;
     margin-left: 0;
     margin-top: 64px;
     padding: 14px;
