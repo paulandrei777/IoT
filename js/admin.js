@@ -114,7 +114,7 @@ function showSection(sectionId) {
     else if (sectionId === 'resolvedTransactions') loadResolvedTransactionsTable();
     else if (sectionId === 'verificationHub') loadVerificationHub();
 
-    if (sidebar) sidebar.classList.remove('active');
+    if (sidebar) sidebar.classList.remove('open');
     if (sidebarOverlay) sidebarOverlay.classList.remove('active');
   } catch (error) {
     console.error('Error switching section:', error);
@@ -1362,19 +1362,24 @@ function handleLogout() {
 
 // ========== SIDEBAR ==========
 function toggleSidebar() {
-  sidebar?.classList.toggle('active');
+  if (window.innerWidth > 768) {
+    closeSidebar();
+    return;
+  }
+
+  sidebar?.classList.toggle('open');
   sidebarOverlay?.classList.toggle('active');
 }
 
 function closeSidebar() {
-  sidebar?.classList.remove('active');
+  sidebar?.classList.remove('open');
   sidebarOverlay?.classList.remove('active');
 }
 
 function syncSidebarOverlayState() {
   if (window.innerWidth > 768) {
     sidebarOverlay?.classList.remove('active');
-    sidebar?.classList.remove('active');
+    sidebar?.classList.remove('open');
   }
 }
 
