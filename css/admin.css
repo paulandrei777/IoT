@@ -5,7 +5,7 @@ body {
 
 body {
   margin: 0;
-  overflow: hidden;
+  overflow-x: hidden;
   background: #f8f9fa;
   color: #2d3436;
   font-family: 'Inter', 'Poppins', 'Roboto', Arial, sans-serif;
@@ -176,7 +176,6 @@ body {
 }
 
 .admin-main {
-  margin-left: 280px;
   padding: 24px;
   min-height: 100vh;
   overflow: auto;
@@ -939,10 +938,6 @@ body {
 
   .sidebar {
     width: 250px;
-  }
-
-  .admin-main {
-    margin-left: 250px;
   }
 }
 
