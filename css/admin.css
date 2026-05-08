@@ -155,6 +155,7 @@ body {
 
 .sidebar-overlay {
   display: none;
+  pointer-events: none;
   position: fixed;
   inset: 0;
   background: rgba(20, 30, 44, 0.38);
@@ -167,6 +168,11 @@ body {
 .sidebar-overlay.active {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
+}
+
+.sidebar-overlay:not(.active) {
+  pointer-events: none;
 }
 
 .admin-main {
@@ -1010,6 +1016,15 @@ body {
   .modal-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (min-width: 769px) {
+  .sidebar-overlay {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 }
 

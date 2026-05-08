@@ -1371,6 +1371,23 @@ function closeSidebar() {
   sidebarOverlay?.classList.remove('active');
 }
 
+function syncSidebarOverlayState() {
+  if (window.innerWidth > 768) {
+    sidebarOverlay?.classList.remove('active');
+    sidebar?.classList.remove('active');
+  }
+}
+
+function bindSidebarNavigation() {
+  document.querySelectorAll('.sidebar-nav .nav-link[data-section]').forEach(link => {
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      const sectionId = link.dataset.section;
+      if (sectionId) showSection(sectionId);
+    });
+  });
+}
+
 // ========== PAGE INIT ==========
 function initPage() {
   logoutBtn?.addEventListener('click', handleLogout);
@@ -1381,6 +1398,10 @@ function initPage() {
     await updateDashboardStats();
     await loadVerificationHub();
   });
+
+  bindSidebarNavigation();
+  syncSidebarOverlayState();
+  window.addEventListener('resize', syncSidebarOverlayState, { passive: true });
 
   const lightbox = document.getElementById('lightbox');
   lightbox?.addEventListener('click', e => { if (e.target === lightbox) closeLightbox(); });
