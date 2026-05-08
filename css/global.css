@@ -7,17 +7,21 @@
 
 /* CSS Variables */
 :root {
-  --red:        #D32F2F;
-  --red-dark:   #B71C1C;
-  --red-light:  #FFEBEE;
-  --red-mid:    #EF5350;
+  --red:        #D9363E;
+  --red-dark:   #BA2A32;
+  --red-light:  #FDE9EC;
+  --red-mid:    #E4575D;
+  --blue:       #0F62FE;
+  --blue-dark:  #0A4FD1;
+  --green:      #1F9D58;
+  --green-dark: #19874A;
   --white:      #FFFFFF;
-  --gray-50:    #FAFAFA;
-  --gray-100:   #F5F5F5;
-  --gray-200:   #EEEEEE;
-  --gray-400:   #BDBDBD;
-  --gray-600:   #757575;
-  --gray-800:   #424242;
+  --gray-50:    #F8F9FA;
+  --gray-100:   #F4F7F6;
+  --gray-200:   #E9EDF2;
+  --gray-400:   #A6B3BE;
+  --gray-600:   #667684;
+  --gray-800:   #2D3436;
   --shadow-sm:  0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
   --shadow-md:  0 6px 20px rgba(0,0,0,0.15), 0 3px 10px rgba(0,0,0,0.10);
   --shadow-lg:  0 12px 40px rgba(0,0,0,0.18), 0 6px 20px rgba(0,0,0,0.12);
@@ -100,12 +104,12 @@ body {
 }
 
 .btn-primary {
-  background: var(--red);
+  background: var(--blue);
   color: var(--white);
 }
 
 .btn-primary:hover {
-  background: var(--red-dark);
+  background: var(--blue-dark);
 }
 
 .btn-danger {
@@ -118,12 +122,39 @@ body {
 }
 
 .btn-success {
-  background: #2E7D32;
+  background: var(--green);
   color: var(--white);
 }
 
 .btn-success:hover {
-  background: #1B5E20;
+  background: var(--green-dark);
+}
+
+.btn-blue {
+  background: var(--blue);
+  color: var(--white);
+}
+
+.btn-blue:hover {
+  background: var(--blue-dark);
+}
+
+.btn-green {
+  background: var(--green);
+  color: var(--white);
+}
+
+.btn-green:hover {
+  background: var(--green-dark);
+}
+
+.btn-red {
+  background: var(--red);
+  color: var(--white);
+}
+
+.btn-red:hover {
+  background: var(--red-dark);
 }
 
 /* Badge Styles */

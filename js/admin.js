@@ -347,7 +347,7 @@ function ensureLostReportModal() {
   modal.className = 'modal';
   modal.style.display = 'none';
   modal.innerHTML = `
-    <div class="modal-content">
+    <div class="modal-content modal-box">
       <button class="modal-close" onclick="closeLostReportModal()">&times;</button>
       <div class="modal-header">
         <div>
@@ -398,13 +398,13 @@ function ensureLostReportModal() {
         <textarea id="lostNotificationMessage" class="modal-textarea notification-textarea" rows="5" placeholder="Type your message to the student here..."></textarea>
         <div class="notification-panel-actions">
           <button class="btn btn-secondary" type="button" onclick="toggleNotificationComposer('lost')">Cancel</button>
-          <button class="btn btn-primary btn-notify" type="button" id="lostSendUpdateBtn" onclick="sendNotificationUpdate('lost')">Send Update</button>
+          <button class="btn btn-blue btn-notify" type="button" id="lostSendUpdateBtn" onclick="sendNotificationUpdate('lost')">Send Update</button>
         </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeLostReportModal()">Close</button>
-        <button class="btn btn-primary btn-notify" onclick="toggleNotificationComposer('lost')">Notify Student</button>
-        <button class="btn btn-success" id="assignMatchBtn" onclick="assignManualMatch()" disabled>Assign Match</button>
+        <button class="btn btn-blue btn-notify" onclick="toggleNotificationComposer('lost')">Notify Student</button>
+        <button class="btn btn-green" id="assignMatchBtn" onclick="assignManualMatch()" disabled>Assign Match</button>
       </div>
     </div>`;
 
@@ -846,7 +846,7 @@ async function loadVerificationHub() {
       const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
 
       return `
-        <div class="verification-card" data-report-id="${report.id}" data-student-email="${report.student_email}" data-student-name="${(report.student_name || '').replace(/"/g, '&quot;')}">
+        <div class="verification-card card" data-report-id="${report.id}" data-student-email="${report.student_email}" data-student-name="${(report.student_name || '').replace(/"/g, '&quot;')}">
           <div class="verification-header">
             <h3>${report.student_name || 'Unknown'}</h3>
             <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
@@ -879,13 +879,13 @@ async function loadVerificationHub() {
             <textarea class="modal-textarea notification-textarea verification-notification-message" rows="5" placeholder="Type your message to the student here..."></textarea>
             <div class="notification-panel-actions">
               <button class="btn btn-secondary" type="button" onclick="toggleVerificationNotificationPanel(this)">Cancel</button>
-              <button class="btn btn-primary btn-notify" type="button" onclick="sendVerificationNotification(this)">Send Update</button>
+              <button class="btn btn-blue btn-notify" type="button" onclick="sendVerificationNotification(this)">Send Update</button>
             </div>
           </div>
           <div class="verification-actions">
-            <button class="btn btn-success" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
-            <button class="btn btn-primary btn-notify" onclick="toggleVerificationNotificationPanel(this)">Notify Student</button>
-            <button class="btn btn-danger" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
+            <button class="btn btn-green" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
+            <button class="btn btn-blue btn-notify" onclick="toggleVerificationNotificationPanel(this)">Notify Student</button>
+            <button class="btn btn-red" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
           </div>
         </div>`;
     });

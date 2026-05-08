@@ -7,7 +7,6 @@
   <title>Admin Dashboard - DominiFinds</title>
   <link rel="stylesheet" href="/css/global.css">
   <link rel="stylesheet" href="/css/admin.css">
-  <link rel="stylesheet" href="/css/admin-enhancements.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
@@ -68,7 +67,7 @@
             <p class="user-role" id="userRole">Loading...</p>
           </div>
         </div>
-        <button class="btn btn-danger logout-btn" id="logoutBtn">
+        <button class="btn btn-red logout-btn" id="logoutBtn">
           <i class="fas fa-sign-out-alt"></i> Logout
         </button>
       </div>
@@ -134,7 +133,7 @@
 
       <div class="admin-controls">
         <div class="search-group">
-          <button class="btn btn-primary" id="refreshBtn">
+          <button class="btn btn-blue" id="refreshBtn">
             <i class="fas fa-sync-alt"></i> Refresh
           </button>
         </div>
@@ -209,7 +208,7 @@
 
   <!-- Pending Item Review Modal -->
   <div id="itemActionModal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content modal-box">
       <button class="modal-close" onclick="closeItemActionModal()">&times;</button>
       <div class="modal-header">
         <div>
@@ -241,10 +240,10 @@
         </div>
       </div>
       <div class="modal-actions" style="justify-content: space-between;">
-        <button class="btn btn-danger" id="modalDeleteBtn" onclick="deleteItem()"><i class="fas fa-trash"></i> Delete Item</button>
+        <button class="btn btn-red" id="modalDeleteBtn" onclick="deleteItem()"><i class="fas fa-trash"></i> Delete Item</button>
         <div style="display: flex; gap: 8px;">
           <button class="btn btn-secondary" onclick="closeItemActionModal()">Cancel</button>
-          <button class="btn btn-success" id="modalUpdateBtn" onclick="updateItemStatus()">Update Status</button>
+          <button class="btn btn-green" id="modalUpdateBtn" onclick="updateItemStatus()">Update Status</button>
         </div>
       </div>
     </div>
@@ -252,7 +251,7 @@
 
   <!-- Claim Verification Modal -->
   <div id="claimVerificationModal" class="modal" style="display: none;">
-    <div class="modal-content">
+    <div class="modal-content modal-box">
       <button class="modal-close" onclick="closeClaimVerificationModal()">&times;</button>
       <div class="modal-header">
         <h3 id="claimVerificationTitle">Verify Claim</h3>
@@ -279,16 +278,16 @@
           <textarea id="claimNotificationMessage" class="modal-textarea notification-textarea" rows="5" placeholder="Type your message to the student here..."></textarea>
           <div class="notification-panel-actions">
             <button class="btn btn-secondary" type="button" onclick="toggleNotificationComposer('claim')">Cancel</button>
-            <button class="btn btn-primary btn-notify" type="button" id="claimSendUpdateBtn" onclick="sendNotificationUpdate('claim')">Send Update</button>
+            <button class="btn btn-blue btn-notify" type="button" id="claimSendUpdateBtn" onclick="sendNotificationUpdate('claim')">Send Update</button>
           </div>
         </div>
       </div>
       <div class="modal-actions" style="justify-content: space-between;">
-        <button class="btn btn-danger" onclick="rejectClaim(document.getElementById('claimVerificationModal').dataset.reportId)">Reject Match</button>
+        <button class="btn btn-red" onclick="rejectClaim(document.getElementById('claimVerificationModal').dataset.reportId)">Reject Match</button>
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn-primary btn-notify" onclick="toggleNotificationComposer('claim')">Notify Student</button>
+          <button class="btn btn-blue btn-notify" onclick="toggleNotificationComposer('claim')">Notify Student</button>
           <button class="btn btn-secondary" onclick="closeClaimVerificationModal()">Cancel</button>
-          <button class="btn btn-success" onclick="approveClaim(document.getElementById('claimVerificationModal').dataset.reportId, document.getElementById('claimVerificationModal').dataset.itemId)">Approve Claim</button>
+          <button class="btn btn-green" onclick="approveClaim(document.getElementById('claimVerificationModal').dataset.reportId, document.getElementById('claimVerificationModal').dataset.itemId)">Approve Claim</button>
         </div>
       </div>
     </div>
