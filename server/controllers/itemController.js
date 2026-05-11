@@ -336,8 +336,6 @@ const submitLostReport = async (req, res) => {
     ref_photo_url_2,
     matched_item_id,
     match_score,
-    time_captured,
-    date_proximity,
   } = req.body || {};
 
   if (!student_name || !student_email || !item_description) {
@@ -357,8 +355,6 @@ const submitLostReport = async (req, res) => {
       ref_photo_url_2: ref_photo_url_2 || '',
       matched_item_id: matched_item_id || null,
       match_score: Number(match_score) || 0,
-      time_captured: time_captured || null,
-      date_proximity: date_proximity || null,
       status: 'pending',
     };
 
