@@ -821,9 +821,11 @@ async function loadVerificationHub() {
   if (!window.supabaseClient || !verificationContainer) return;
 
   try {
+    // Select only EXISTING columns from lost_reports
+    // Remove time_captured and date_proximity - they don't exist in this table
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1, time_captured, date_proximity')
+      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .gte('match_score', 70)
@@ -839,7 +841,7 @@ async function loadVerificationHub() {
       return;
     }
 
-    // Collect item IDs and fetch them in one query
+    // Collect item IDs and fetch them in one query to get items.created_at (time_captured)
     const itemIds = [...new Set(reports.map(r => r.matched_item_id).filter(Boolean))];
     let itemsMap = {};
 
@@ -852,6 +854,40 @@ async function loadVerificationHub() {
       if (itemsError) throw itemsError;
       itemsData?.forEach(item => { itemsMap[item.id] = item; });
     }
+
+    // Helper function to calculate date proximity
+    // Compares when item was found (items.created_at) vs when student reported it lost (lost_reports.created_at)
+    const calculateDateProximity = (itemCreatedAt, reportCreatedAt) => {
+      if (!itemCreatedAt || !reportCreatedAt) return null;
+
+      const itemTime = new Date(itemCreatedAt).getTime();
+      const reportTime = new Date(reportCreatedAt).getTime();
+      const diffMs = itemTime - reportTime;
+      const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffMs < 0) {
+        // Item found BEFORE report
+        const absDiffHours = Math.abs(diffHours);
+        const absDiffDays = Math.abs(diffDays);
+        if (absDiffHours < 1) {
+          return 'Found before reported loss (within 1 hour)';
+        } else if (absDiffHours < 24) {
+          return `Found ${absDiffHours} hour(s) before reported loss`;
+        } else {
+          return `Found ${absDiffDays} day(s) before reported loss`;
+        }
+      } else {
+        // Item found AFTER or SAME TIME as report
+        if (diffHours < 1) {
+          return 'Found within 1 hour of reported loss';
+        } else if (diffHours < 24) {
+          return `Found ${diffHours} hour(s) after reported loss`;
+        } else {
+          return `Found ${diffDays} day(s) after reported loss`;
+        }
+      }
+    };
 
     const cards = reports.map(report => {
       const matchedItem = report.matched_item_id ? itemsMap[report.matched_item_id] : null;
@@ -869,11 +905,15 @@ async function loadVerificationHub() {
       const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
       const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
       
-      // Format time captured timestamp
-      const timeCaptured = report.time_captured ? new Date(report.time_captured).toLocaleString('en-US', {
+      // Use matchedItem.created_at as time_captured (when the item was found/added to system)
+      const timeCapturedValue = matchedItem?.created_at || new Date().toISOString();
+      const timeCaptured = new Date(timeCapturedValue).toLocaleString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
-      }) : 'Unknown';
+      });
+
+      // Calculate date_proximity: compare when item was found vs when loss was reported
+      const dateProximity = calculateDateProximity(matchedItem?.created_at, report.created_at);
 
       return `
         <div class="verification-card card clean-light-card" data-report-id="${report.id}" data-student-email="${report.student_email}" data-student-name="${(report.student_name || '').replace(/"/g, '&quot;')}">
@@ -911,9 +951,9 @@ async function loadVerificationHub() {
                   <strong>📅 Time Captured:</strong> 
                   <span class="temporal-value">${timeCaptured}</span>
                 </div>
-                ${report.date_proximity ? `<div class="temporal-info-row">
+                ${dateProximity ? `<div class="temporal-info-row">
                   <strong>⏱️ Date Proximity:</strong> 
-                  <span class="temporal-value date-proximity">${report.date_proximity}</span>
+                  <span class="temporal-value date-proximity">${dateProximity}</span>
                 </div>` : ''}
               </div>
               
