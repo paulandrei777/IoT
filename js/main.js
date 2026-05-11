@@ -62,20 +62,42 @@ async function loadUserProfile() {
       return;
     }
 
-    if (typeof getProfile !== 'function') {
-      console.warn('[loadUserProfile] getProfile() not available from auth.js');
-      return;
-    }
-
-    const profile = await getProfile(session.user.id);
-    console.log('[loadUserProfile] Profile fetched:', profile);
-
+    // Populate settings/profile UI with session-based fallbacks first
+    const settingsFullNameEl = document.getElementById('settingsFullName');
+    const settingsEmailEl = document.getElementById('settingsEmail');
+    const settingsRoleEl = document.getElementById('settingsRole');
     const userNameEl = document.getElementById('userName');
-    if (userNameEl) userNameEl.textContent = profile?.full_name || 'Student';
 
-    // Pre-fill report form fields with profile data
-    if (studentNameInput && profile?.full_name) studentNameInput.value = profile.full_name;
-    if (studentEmailInput && profile?.email) studentEmailInput.value = profile.email;
+    const fallbackName = session.user.user_metadata?.full_name || session.user.email || 'Student';
+    const fallbackEmail = session.user.email || '';
+
+    if (settingsFullNameEl) settingsFullNameEl.textContent = fallbackName;
+    if (settingsEmailEl) settingsEmailEl.textContent = fallbackEmail;
+    if (settingsRoleEl) settingsRoleEl.textContent = 'Student';
+    if (userNameEl) userNameEl.textContent = fallbackName;
+
+    // If profile helper is available, fetch additional profile fields (role, canonical full_name, email)
+    if (typeof getProfile === 'function') {
+      try {
+        const profile = await getProfile(session.user.id);
+        console.log('[loadUserProfile] Profile fetched:', profile);
+
+        if (settingsFullNameEl) settingsFullNameEl.textContent = profile?.full_name || fallbackName;
+        if (settingsEmailEl) settingsEmailEl.textContent = profile?.email || fallbackEmail;
+        if (settingsRoleEl) settingsRoleEl.textContent = profile?.role ? (String(profile.role).charAt(0).toUpperCase() + String(profile.role).slice(1)) : 'Student';
+        if (userNameEl) userNameEl.textContent = profile?.full_name || fallbackName;
+
+        // Pre-fill report form fields with profile data
+        if (studentNameInput && profile?.full_name) studentNameInput.value = profile.full_name;
+        if (studentEmailInput && profile?.email) studentEmailInput.value = profile.email;
+      } catch (err) {
+        console.error('[loadUserProfile] Error fetching profile via getProfile():', err);
+      }
+    } else {
+      // no getProfile available — still pre-fill from session
+      if (studentNameInput && session.user.user_metadata?.full_name) studentNameInput.value = session.user.user_metadata.full_name;
+      if (studentEmailInput && session.user.email) studentEmailInput.value = session.user.email;
+    }
 
   } catch (error) {
     console.error('[loadUserProfile] Error:', error);
