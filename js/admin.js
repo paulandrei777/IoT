@@ -1505,12 +1505,216 @@ document.addEventListener('DOMContentLoaded', async () => {
     showSection('verificationHub');
     await updateDashboardStats();   // single unified stats call
     await loadVerificationHub();
+    await loadSettings();
 
     console.log('=== Admin Dashboard Initialization Complete ===');
   } catch (error) {
     console.error('[DOMContentLoaded] Fatal error:', error);
   }
 });
+
+// ========== SETTINGS & PROFILE ==========
+
+async function loadSettings() {
+  try {
+    const { data: authData } = await window.supabaseClient.auth.getUser();
+    const userId = authData?.user?.id;
+
+    if (!userId) {
+      console.warn('[loadSettings] No authenticated user');
+      return;
+    }
+
+    // Fetch admin profile from profiles table (RLS-protected)
+    const { data: profile, error } = await window.supabaseClient
+      .from('profiles')
+      .select('id, full_name, email, role')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      console.error('[loadSettings] Error fetching profile:', error);
+      return;
+    }
+
+    console.log('[loadSettings] Profile loaded:', { full_name: profile?.full_name, email: profile?.email, role: profile?.role });
+
+    // Populate form fields
+    const fullNameInput = document.getElementById('settingsFullName');
+    const emailInput = document.getElementById('settingsEmail');
+    const roleInput = document.getElementById('settingsRole');
+
+    if (fullNameInput) fullNameInput.value = profile?.full_name || '';
+    if (emailInput) emailInput.value = profile?.email || '';
+    if (roleInput) roleInput.value = profile?.role ? (String(profile.role).charAt(0).toUpperCase() + String(profile.role).slice(1)) : 'Administrator';
+
+    // Store original profile for reset
+    window.originalProfile = {
+      full_name: profile?.full_name || '',
+      email: profile?.email || '',
+      role: profile?.role || 'admin',
+    };
+
+  } catch (error) {
+    console.error('[loadSettings] Error:', error);
+  }
+}
+
+async function updateProfile() {
+  try {
+    const fullNameInput = document.getElementById('settingsFullName');
+    const currentPasswordInput = document.getElementById('currentPassword');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const profileMessage = document.getElementById('profileMessage');
+    const securityMessage = document.getElementById('securityMessage');
+
+    const fullName = fullNameInput?.value?.trim() || '';
+    const currentPassword = currentPasswordInput?.value || '';
+    const newPassword = newPasswordInput?.value || '';
+    const confirmPassword = confirmPasswordInput?.value || '';
+
+    // Validate inputs
+    if (!fullName) {
+      showSettingsMessage(profileMessage, 'Full name is required', 'error');
+      return;
+    }
+
+    if (!currentPassword) {
+      showSettingsMessage(securityMessage, 'Current password is required for verification', 'error');
+      return;
+    }
+
+    // Verify current password by attempting re-authentication
+    const { data: authData } = await window.supabaseClient.auth.getUser();
+    const userEmail = authData?.user?.email;
+
+    if (!userEmail) {
+      showSettingsMessage(securityMessage, 'Unable to verify identity', 'error');
+      return;
+    }
+
+    console.log('[updateProfile] Verifying current password...');
+    const { error: signInError } = await window.supabaseClient.auth.signInWithPassword({
+      email: userEmail,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      console.error('[updateProfile] Password verification failed:', signInError);
+      showSettingsMessage(securityMessage, 'Current password is incorrect', 'error');
+      return;
+    }
+
+    console.log('[updateProfile] Password verified successfully');
+
+    // Update full_name in profiles table
+    const { error: updateProfileError } = await window.supabaseClient
+      .from('profiles')
+      .update({ full_name: fullName })
+      .eq('id', authData.user.id);
+
+    if (updateProfileError) {
+      console.error('[updateProfile] Error updating profile:', updateProfileError);
+      showSettingsMessage(profileMessage, 'Failed to update profile', 'error');
+      return;
+    }
+
+    console.log('[updateProfile] Profile updated successfully');
+    showSettingsMessage(profileMessage, 'Profile updated successfully', 'success');
+
+    // Handle password change if provided
+    if (newPassword || confirmPassword) {
+      if (!newPassword || !confirmPassword) {
+        showSettingsMessage(securityMessage, 'Both new password fields must be filled', 'error');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showSettingsMessage(securityMessage, 'New passwords do not match', 'error');
+        return;
+      }
+
+      if (newPassword.length < 8) {
+        showSettingsMessage(securityMessage, 'New password must be at least 8 characters', 'error');
+        return;
+      }
+
+      console.log('[updateProfile] Updating password...');
+      const { error: passwordError } = await window.supabaseClient.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (passwordError) {
+        console.error('[updateProfile] Password update failed:', passwordError);
+        showSettingsMessage(securityMessage, 'Failed to update password: ' + passwordError.message, 'error');
+        return;
+      }
+
+      console.log('[updateProfile] Password updated successfully');
+      showSettingsMessage(securityMessage, 'Password changed successfully', 'success');
+      
+      // Clear password fields
+      if (currentPasswordInput) currentPasswordInput.value = '';
+      if (newPasswordInput) newPasswordInput.value = '';
+      if (confirmPasswordInput) confirmPasswordInput.value = '';
+    }
+
+    // Update original profile for reset
+    window.originalProfile.full_name = fullName;
+
+    // Reload sidebar with updated name
+    await loadUserProfile();
+
+  } catch (error) {
+    console.error('[updateProfile] Error:', error);
+    const profileMessage = document.getElementById('profileMessage');
+    showSettingsMessage(profileMessage, 'An error occurred: ' + error.message, 'error');
+  }
+}
+
+function resetSettingsForm() {
+  try {
+    const fullNameInput = document.getElementById('settingsFullName');
+    const currentPasswordInput = document.getElementById('currentPassword');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const profileMessage = document.getElementById('profileMessage');
+    const securityMessage = document.getElementById('securityMessage');
+
+    // Reset to original values
+    if (fullNameInput && window.originalProfile) {
+      fullNameInput.value = window.originalProfile.full_name || '';
+    }
+
+    // Clear password fields
+    if (currentPasswordInput) currentPasswordInput.value = '';
+    if (newPasswordInput) newPasswordInput.value = '';
+    if (confirmPasswordInput) confirmPasswordInput.value = '';
+
+    // Clear messages
+    profileMessage?.classList.remove('success', 'error');
+    securityMessage?.classList.remove('success', 'error');
+
+    console.log('[resetSettingsForm] Form reset to original values');
+  } catch (error) {
+    console.error('[resetSettingsForm] Error:', error);
+  }
+}
+
+function showSettingsMessage(element, message, type = 'info') {
+  if (!element) return;
+
+  element.textContent = message;
+  element.className = 'status-message';
+  
+  if (message) {
+    element.classList.add(`status-message--${type}`);
+    element.style.display = 'block';
+  } else {
+    element.style.display = 'none';
+  }
+}
 
 // ========== LOST ITEM VIEW ==========
 function handleViewLostItem(button) {

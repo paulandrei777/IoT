@@ -53,6 +53,10 @@
           <i class="fas fa-history"></i>
           <span>Audit Logs</span>
         </a>
+        <a href="#" class="nav-link" data-section="settings" onclick="showSection('settings'); return false;">
+          <i class="fas fa-cog"></i>
+          <span>Settings</span>
+        </a>
       </nav>
 
       <!-- User Profile Card -->
@@ -191,6 +195,63 @@
         <h2>Match Verification Hub</h2>
         <p class="section-description">Pending AI Matches - Verify if these items belong to the students.</p>
         <div id="verificationContainer" class="verification-container"></div>
+      </section>
+
+      <!-- Settings Section -->
+      <section class="admin-section dashboard-section hidden" id="settingsSection" style="display: none;">
+        <h2>Admin Settings</h2>
+        <p class="section-description">Manage your profile and account security.</p>
+
+        <div class="settings-grid">
+          <!-- Profile Card -->
+          <div class="settings-card clean-light-card">
+            <h3>Profile Information</h3>
+            <form id="profileForm" class="settings-form">
+              <div class="form-group">
+                <label for="settingsFullName">Full Name</label>
+                <input type="text" id="settingsFullName" class="form-input" placeholder="Enter your full name">
+              </div>
+              <div class="form-group">
+                <label for="settingsEmail">Email Address</label>
+                <input type="email" id="settingsEmail" class="form-input" placeholder="your.email@example.com" disabled>
+                <small class="form-help">Email is managed by your account administrator</small>
+              </div>
+              <div class="form-group">
+                <label for="settingsRole">Role</label>
+                <input type="text" id="settingsRole" class="form-input" placeholder="Administrator" disabled>
+                <small class="form-help">Your account role cannot be changed</small>
+              </div>
+            </form>
+          </div>
+
+          <!-- Security Card -->
+          <div class="settings-card clean-light-card">
+            <h3>Security Settings</h3>
+            <form id="securityForm" class="settings-form">
+              <div class="form-group">
+                <label for="currentPassword">Current Password <span class="required">*</span></label>
+                <input type="password" id="currentPassword" class="form-input" placeholder="Enter your current password">
+              </div>
+              <div class="form-group">
+                <label for="newPassword">New Password</label>
+                <input type="password" id="newPassword" class="form-input" placeholder="Leave blank to keep current password">
+                <small class="form-help">At least 8 characters recommended</small>
+              </div>
+              <div class="form-group">
+                <label for="confirmPassword">Confirm New Password</label>
+                <input type="password" id="confirmPassword" class="form-input" placeholder="Confirm new password">
+              </div>
+              <div id="securityMessage" class="status-message" aria-live="polite"></div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Save/Update Buttons -->
+        <div class="settings-actions">
+          <button class="btn btn-secondary" onclick="resetSettingsForm()">Cancel Changes</button>
+          <button class="btn btn-green" onclick="updateProfile()">Save Changes</button>
+        </div>
+        <div id="profileMessage" class="status-message" aria-live="polite"></div>
       </section>
     </main>
   </div>
