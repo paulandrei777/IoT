@@ -823,10 +823,11 @@ async function loadVerificationHub() {
   try {
     const { data: reports, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1')
+      .select('id, student_name, student_email, item_description, last_location, status, created_at, matched_item_id, match_score, ref_photo_url_1, time_captured, date_proximity')
       .eq('status', 'pending')
       .not('matched_item_id', 'is', null)
       .gte('match_score', 70)
+      .order('match_score', { ascending: false })
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -845,7 +846,7 @@ async function loadVerificationHub() {
     if (itemIds.length > 0) {
       const { data: itemsData, error: itemsError } = await window.supabaseClient
         .from('items')
-        .select('id, display_name, name, image_url, status')
+        .select('id, display_name, name, image_url, status, created_at')
         .in('id', itemIds);
 
       if (itemsError) throw itemsError;
@@ -867,33 +868,59 @@ async function loadVerificationHub() {
 
       const itemImgUrl = matchedItem?.image_url ? getSupabasePublicUrl(matchedItem.image_url) : '';
       const refImgUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
+      
+      // Format time captured timestamp
+      const timeCaptured = report.time_captured ? new Date(report.time_captured).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      }) : 'Unknown';
 
       return `
-        <div class="verification-card card" data-report-id="${report.id}" data-student-email="${report.student_email}" data-student-name="${(report.student_name || '').replace(/"/g, '&quot;')}">
+        <div class="verification-card card clean-light-card" data-report-id="${report.id}" data-student-email="${report.student_email}" data-student-name="${(report.student_name || '').replace(/"/g, '&quot;')}">
           <div class="verification-header">
-            <h3>${report.student_name || 'Unknown'}</h3>
-            <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
+            <div class="header-info">
+              <h3>${report.student_name || 'Unknown'}</h3>
+              <span class="status-badge status-${report.status}">${report.status.toUpperCase()}</span>
+            </div>
+            <div class="match-score-badge">
+              <span class="match-score-value">${report.match_score ?? 0}%</span>
+              <span class="match-score-label">Match</span>
+            </div>
           </div>
+          
           <div class="verification-body">
             <div class="verification-images">
               <div class="image-section">
                 <h4>Student Reference Photo</h4>
-                ${refImgUrl ? `<img src="${refImgUrl}" alt="Reference" onclick="openLightbox('${refImgUrl}')">` : '<p class="no-image">No image provided</p>'}
+                ${refImgUrl ? `<img src="${refImgUrl}" alt="Reference" onclick="openLightbox('${refImgUrl}')" class="verification-image">` : '<p class="no-image">No image provided</p>'}
               </div>
               <div class="verification-vs-badge" aria-hidden="true">VS</div>
               <div class="image-section">
                 <h4>Office Item Image</h4>
-                ${itemImgUrl ? `<img src="${itemImgUrl}" alt="Item" onclick="openLightbox('${itemImgUrl}')">` : '<p class="no-image">No matched item</p>'}
+                ${itemImgUrl ? `<img src="${itemImgUrl}" alt="Item" onclick="openLightbox('${itemImgUrl}')" class="verification-image">` : '<p class="no-image">No matched item</p>'}
               </div>
             </div>
+            
             <div class="verification-details">
               <p><strong>Student Email:</strong> <span class="student-email">${report.student_email}</span></p>
-              <p><strong>Description:</strong> ${report.item_description || 'N/A'}</p>
-              <p><strong>Location:</strong> ${report.last_location || 'Not specified'}</p>
-              <p><strong>Match Score:</strong> <span class="match-score">${report.match_score ?? 0}%</span></p>
+              <p><strong>Item Description:</strong> ${report.item_description || 'N/A'}</p>
+              <p><strong>Location Lost:</strong> ${report.last_location || 'Not specified'}</p>
+              
+              <div class="temporal-info-section">
+                <div class="temporal-info-row">
+                  <strong>📅 Time Captured:</strong> 
+                  <span class="temporal-value">${timeCaptured}</span>
+                </div>
+                ${report.date_proximity ? `<div class="temporal-info-row">
+                  <strong>⏱️ Date Proximity:</strong> 
+                  <span class="temporal-value date-proximity">${report.date_proximity}</span>
+                </div>` : ''}
+              </div>
+              
               ${matchedItem ? `<p><strong>Matched Item:</strong> ${matchedItem.display_name || matchedItem.name || 'N/A'}</p>` : ''}
             </div>
           </div>
+          
           <div class="verification-notification-panel" hidden>
             <div class="notification-panel-header">
               <h4>Send Email Update</h4>
@@ -905,10 +932,11 @@ async function loadVerificationHub() {
               <button class="btn btn-blue btn-notify" type="button" onclick="sendVerificationNotification(this)">Send Update</button>
             </div>
           </div>
+          
           <div class="verification-actions">
-            <button class="btn btn-green" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">Approve Match</button>
-            <button class="btn btn-blue btn-notify" onclick="toggleVerificationNotificationPanel(this)">Notify Student</button>
-            <button class="btn btn-red" onclick="rejectMatch('${report.id}', this)">Reject Match</button>
+            <button class="btn btn-green" onclick="approveMatch('${report.id}', '${report.matched_item_id || ''}', this)">✓ Approve Match</button>
+            <button class="btn btn-blue btn-notify" onclick="toggleVerificationNotificationPanel(this)">📧 Notify Student</button>
+            <button class="btn btn-red" onclick="rejectMatch('${report.id}', this)">✗ Reject Match</button>
           </div>
         </div>`;
     });

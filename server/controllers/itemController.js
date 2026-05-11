@@ -143,12 +143,69 @@ const simpleSimilarityScore = (studentDescription, itemText) => {
   return Math.max(0, Math.min(1, score));
 };
 
+// Calculate date proximity between item found date and student's reported lost date
+// Returns a human-readable string like "Found 2 hours after reported loss"
+const calculateDateProximity = (itemCreatedAt, studentLostDate) => {
+  if (!itemCreatedAt || !studentLostDate) return null;
+
+  const itemTime = new Date(itemCreatedAt).getTime();
+  const lostTime = new Date(studentLostDate).getTime();
+  const diffMs = itemTime - lostTime;
+  const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMs < 0) {
+    const absDiffHours = Math.abs(diffHours);
+    const absDiffDays = Math.abs(diffDays);
+    if (absDiffHours < 1) {
+      return 'Found before reported loss (within 1 hour)';
+    } else if (absDiffHours < 24) {
+      return `Found ${absDiffHours} hour(s) before reported loss`;
+    } else {
+      return `Found ${absDiffDays} day(s) before reported loss`;
+    }
+  } else {
+    if (diffHours < 1) {
+      return 'Found within 1 hour of reported loss';
+    } else if (diffHours < 24) {
+      return `Found ${diffHours} hour(s) after reported loss`;
+    } else {
+      return `Found ${diffDays} day(s) after reported loss`;
+    }
+  }
+};
+
+// Filter items by temporal proximity (24 hours before to present)
+// Returns items that were found within the acceptable time window
+const filterItemsByTemporalProximity = (items, studentLostDate) => {
+  if (!studentLostDate) {
+    // If no lost date provided, return all items (no temporal filtering)
+    return items;
+  }
+
+  const lostTime = new Date(studentLostDate).getTime();
+  const BUFFER_24_HOURS = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+  return items.filter(item => {
+    if (!item.created_at) return false;
+
+    const itemTime = new Date(item.created_at).getTime();
+    const diff = itemTime - lostTime;
+
+    // Accept items found:
+    // 1. Up to 24 hours BEFORE the reported lost date (buffer for memory errors)
+    // 2. Up to the present (any time after the lost date)
+    return diff >= -BUFFER_24_HOURS;
+  });
+};
+
 const calculateMatchScoresWithGemini = async (studentDescription, items) => {
   const candidates = items.slice(0, 20).map(item => ({
     id: item.id,
     display_name: item.display_name || '',
     ai_description: item.ai_description || '',
     combined_text: buildComparableText(item),
+    created_at: item.created_at,
   }));
 
   const prompt = `You are a lost-and-found matching assistant. Compare the student's description with each item's name and description.
@@ -188,6 +245,7 @@ ${JSON.stringify(candidates, null, 2)}`;
         return {
           id: match.id,
           match_score: Math.max(Number(match.match_score) || 0, heuristicScore),
+          created_at: candidate?.created_at,
         };
       });
     }
@@ -198,11 +256,12 @@ ${JSON.stringify(candidates, null, 2)}`;
   return candidates.map(item => ({
     id: item.id,
     match_score: Math.round(simpleSimilarityScore(studentDescription, item.combined_text) * 100),
+    created_at: item.created_at,
   }));
 };
 
 const blindSearchMatch = async (req, res) => {
-  const { item_description } = req.body || {};
+  const { item_description, date_missing } = req.body || {};
   if (!item_description || !item_description.trim()) {
     return res.status(400).json({ error: 'item_description is required' });
   }
@@ -210,7 +269,7 @@ const blindSearchMatch = async (req, res) => {
   try {
     const { data: items, error } = await supabase
       .from('items')
-      .select('id, display_name, ai_description')
+      .select('id, display_name, ai_description, created_at')
       .eq('status', 'approved')
       .not('ai_description', 'is', null)
       .neq('ai_description', '')
@@ -218,19 +277,45 @@ const blindSearchMatch = async (req, res) => {
 
     if (error) throw error;
 
-    const candidates = (items || []).filter(item => item.ai_description && item.ai_description.trim());
+    let candidates = (items || []).filter(item => item.ai_description && item.ai_description.trim());
+    
+    // Apply temporal filtering if lost date is provided
+    if (date_missing) {
+      candidates = filterItemsByTemporalProximity(candidates, date_missing);
+    }
+
     if (!candidates.length) {
-      return res.json({ matched_item_id: null, match_score: 0, message: 'No eligible items available for blind matching.' });
+      return res.json({ 
+        matched_item_id: null, 
+        match_score: 0, 
+        message: 'No eligible items available for blind matching.' 
+      });
     }
 
     const matches = await calculateMatchScoresWithGemini(item_description, candidates);
-    const bestMatch = matches.reduce((best, current) => current.match_score > best.match_score ? current : best, { id: null, match_score: 0 });
+    
+    // Sort by match score (descending), then by created_at (most recent first)
+    const sortedMatches = matches.sort((a, b) => {
+      if (b.match_score !== a.match_score) {
+        return b.match_score - a.match_score;
+      }
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return timeB - timeA;
+    });
+
+    const bestMatch = sortedMatches[0] || { id: null, match_score: 0, created_at: null };
     const matchedItem = candidates.find(item => item.id === bestMatch.id);
+    const dateProximity = date_missing && bestMatch.created_at 
+      ? calculateDateProximity(bestMatch.created_at, date_missing)
+      : null;
 
     res.json({
       matched_item_id: bestMatch.id,
       match_score: bestMatch.match_score,
       matched_item_name: matchedItem?.display_name || null,
+      time_captured: bestMatch.created_at,
+      date_proximity: dateProximity,
     });
   } catch (err) {
     console.error('[blindSearchMatch] Error', err);
@@ -251,6 +336,8 @@ const submitLostReport = async (req, res) => {
     ref_photo_url_2,
     matched_item_id,
     match_score,
+    time_captured,
+    date_proximity,
   } = req.body || {};
 
   if (!student_name || !student_email || !item_description) {
@@ -270,6 +357,8 @@ const submitLostReport = async (req, res) => {
       ref_photo_url_2: ref_photo_url_2 || '',
       matched_item_id: matched_item_id || null,
       match_score: Number(match_score) || 0,
+      time_captured: time_captured || null,
+      date_proximity: date_proximity || null,
       status: 'pending',
     };
 
