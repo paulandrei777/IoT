@@ -200,6 +200,7 @@ async function loadItemsTable() {
               data-image-url="${publicImageUrl}"
               data-item-name="${item.display_name || ''}"
               data-item-desc="${item.ai_description || ''}"
+              data-item-created-at="${item.created_at || ''}"
               data-item-status="${item.status || 'pending'}"
               onclick="handleViewClick(this)">View</button>
           </td>
@@ -1205,11 +1206,32 @@ function handleViewClick(button) {
     button.dataset.imageUrl,
     button.dataset.itemName,
     button.dataset.itemDesc,
-    button.dataset.itemStatus
+    button.dataset.itemStatus,
+    button.dataset.itemCreatedAt
   );
 }
 
-function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentStatus) {
+function formatCaptureTimestamp(createdAt) {
+  if (!createdAt) return '';
+
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const datePart = date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const timePart = date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  return `${datePart} - ${timePart}`;
+}
+
+function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentStatus, createdAt) {
   currentItemId = itemId;
   const modal = document.getElementById('itemActionModal');
   if (!modal) return;
@@ -1218,6 +1240,7 @@ function openItemActionModal(itemId, imageUrl, itemName, aiDescription, currentS
 
   setText('modalTitle', 'Review Item: ' + itemName);
   setText('modalItemStatus', 'Status: ' + (currentStatus || 'pending').toUpperCase());
+  setText('modalCaptureTime', formatCaptureTimestamp(createdAt));
   document.getElementById('modalItemImage').src = imageUrl || '';
 
   const nameEl = document.getElementById('modalItemName');
