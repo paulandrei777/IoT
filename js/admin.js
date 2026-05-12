@@ -875,7 +875,7 @@ async function loadResolvedTransactionsTable(pageNumber = tablePaginationState.r
     }
 
     const rows = reports.map(report => {
-      renderPaginationControls('resolvedTransactions', count || 0, tablePaginationState.resolvedTransactions);
+      const matchedItem = report.matched_item_id ? itemsMap[report.matched_item_id] : null;
 
       const rawUrl = matchedItem?.image_url;
       const itemImageUrl = rawUrl ? getSupabasePublicUrl(rawUrl) : FALLBACK_ITEM_IMAGE;
@@ -906,7 +906,7 @@ async function loadResolvedTransactionsTable(pageNumber = tablePaginationState.r
 
     tbody.innerHTML = rows.join('');
     console.log(`[loadResolvedTransactionsTable] Success: ${rows.length} rows rendered.`);
-    renderPaginationControls('resolvedTransactions', reports?.count || 0, tablePaginationState.resolvedTransactions);
+    renderPaginationControls('resolvedTransactions', count || 0, tablePaginationState.resolvedTransactions);
   } catch (err) {
     console.error('[loadResolvedTransactionsTable] Error:', err);
     tbody.innerHTML = '<tr><td colspan="6" class="error">Error loading data. Check console.</td></tr>';
