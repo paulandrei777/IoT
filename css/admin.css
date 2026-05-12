@@ -1113,6 +1113,12 @@ body {
   text-overflow: ellipsis;
 }
 
+.manual-match-result-date {
+  color: var(--text-light);
+  font-size: 0.76rem;
+  margin-top: 2px;
+}
+
 .manual-match-selection {
   margin-top: 10px;
   display: flex;

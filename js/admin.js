@@ -521,7 +521,7 @@ async function searchManualMatchItems(query) {
   try {
     const { data, error } = await window.supabaseClient
       .from('items')
-      .select('id, display_name, image_url, status')
+      .select('id, display_name, image_url, ai_description, created_at, status')
       .eq('status', 'approved')
       .ilike('display_name', `%${query}%`)
       .order('created_at', { ascending: false })
@@ -539,13 +539,20 @@ async function searchManualMatchItems(query) {
       const safeItemName = String(item.display_name || 'Unknown Item').replace(/'/g, "\\'");
       const safeImageUrl = String(itemImageUrl).replace(/'/g, "\\'");
       const safeDescription = String(item.ai_description || 'No AI description available').replace(/'/g, "\\'");
+      const capturedDate = item.created_at
+        ? new Date(item.created_at).toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+          })
+        : 'Date unavailable';
 
       return `
         <button type="button" class="manual-match-result" onclick="selectManualMatchItem('${item.id}', '${safeItemName}', '${safeImageUrl}', '${safeDescription}')">
           <img src="${itemImageUrl}" alt="${item.display_name || 'Item'}" class="manual-match-result-thumb">
           <div class="manual-match-result-text">
             <strong>${item.display_name || 'Unknown Item'}</strong>
-            <span>${item.ai_description || 'No AI description available'}</span>
+            <span class="manual-match-result-date">${capturedDate}</span>
             <span>ID: ${item.id}</span>
           </div>
         </button>`;
