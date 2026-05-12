@@ -8,6 +8,7 @@ if (window.supabaseClient) {
 
 // ========== CONSTANTS & STATE ==========
 const FALLBACK_ITEM_IMAGE = '/assets/images/domini.png';
+const TABLE_PAGE_SIZE = 25;
 let currentSection = 'dashboard';
 let currentStatusFilter = 'all';
 let currentItemId = null;
@@ -15,6 +16,11 @@ let currentAdminName = 'Admin';
 let currentManualMatchReport = null;
 let currentManualMatchItem = null;
 let manualMatchSearchTimer = null;
+const tablePaginationState = {
+  itemManagement: 1,
+  lostReports: 1,
+  resolvedTransactions: 1,
+};
 window.currentAdminName = currentAdminName;
 
 function showAdminToast(message, type = 'success') {
@@ -145,34 +151,81 @@ function addStatusFilterControls() {
 
 function changeStatusFilter(status) {
   currentStatusFilter = status;
-  loadItemsTable();
+  tablePaginationState.itemManagement = 1;
+  loadItemsTable(1);
+}
+
+function setTablePage(sectionKey, pageNumber) {
+  const nextPage = Math.max(1, Number(pageNumber) || 1);
+  tablePaginationState[sectionKey] = nextPage;
+
+  if (sectionKey === 'itemManagement') loadItemsTable(nextPage);
+  else if (sectionKey === 'lostReports') loadLostReportsTable(nextPage);
+  else if (sectionKey === 'resolvedTransactions') loadResolvedTransactionsTable(nextPage);
+}
+
+function changeTablePage(sectionKey, direction) {
+  const currentPage = tablePaginationState[sectionKey] || 1;
+  setTablePage(sectionKey, currentPage + direction);
+}
+
+function renderPaginationControls(sectionKey, totalCount, currentPage) {
+  const container = document.getElementById(`${sectionKey}Pagination`);
+  if (!container) return;
+
+  const totalPages = Math.max(1, Math.ceil((Number(totalCount) || 0) / TABLE_PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage || 1), totalPages);
+
+  if (!totalCount) {
+    container.innerHTML = '';
+    container.hidden = true;
+    return;
+  }
+
+  container.hidden = false;
+  container.innerHTML = `
+    <div class="table-pagination">
+      <button type="button" class="btn btn-pagination" ${safeCurrentPage <= 1 ? 'disabled' : ''} onclick="changeTablePage('${sectionKey}', -1)">Previous</button>
+      <span class="table-pagination-info">Page ${safeCurrentPage} of ${totalPages}</span>
+      <button type="button" class="btn btn-pagination" ${safeCurrentPage >= totalPages ? 'disabled' : ''} onclick="changeTablePage('${sectionKey}', 1)">Next</button>
+    </div>
+  `;
 }
 
 // ========== ITEMS TABLE ==========
-async function loadItemsTable() {
+async function loadItemsTable(pageNumber = tablePaginationState.itemManagement || 1) {
   const tbody = document.getElementById('itemsTableBody');
   if (!tbody || !window.supabaseClient) return;
+
+  tablePaginationState.itemManagement = Math.max(1, Number(pageNumber) || 1);
+  const paginationContainer = document.getElementById('itemManagementPagination');
+  if (paginationContainer) paginationContainer.hidden = true;
 
   tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading items...</td></tr>';
   addStatusFilterControls();
 
   try {
+    const from = (tablePaginationState.itemManagement - 1) * TABLE_PAGE_SIZE;
+    const to = from + TABLE_PAGE_SIZE - 1;
+
     let query = window.supabaseClient
       .from('items')
-      .select('*')
+      .select('*', { count: 'exact' })
       .neq('status', 'claimed')
       .neq('status', 'CLAIMED')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (currentStatusFilter !== 'all') query = query.eq('status', currentStatusFilter);
 
-    const { data: items, error } = await query;
+    const { data: items, count, error } = await query;
     if (error) throw error;
 
-    console.log(`[loadItemsTable] Rows fetched: ${items?.length ?? 0}`);
+    console.log(`[loadItemsTable] Rows fetched: ${items?.length ?? 0}, Total: ${count ?? 0}`);
 
     if (!items || items.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="no-data">No items found.</td></tr>';
+      renderPaginationControls('itemManagement', count || 0, tablePaginationState.itemManagement);
       return;
     }
 
@@ -206,39 +259,51 @@ async function loadItemsTable() {
           </td>
         </tr>`;
     }).join('');
+
+    renderPaginationControls('itemManagement', count || 0, tablePaginationState.itemManagement);
   } catch (error) {
     console.error('[loadItemsTable] Error:', error);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading items. Please refresh.</td></tr>';
+    renderPaginationControls('itemManagement', 0, tablePaginationState.itemManagement);
   }
 }
 
 // ========== LOST REPORTS TABLE ==========
 // FIX: Shows reports where matched_item_id IS NULL (no AI match) AND status is NOT 'resolved'
 // This ensures rejected items (cleared matched_item_id, status back to 'pending') appear here
-async function loadLostReportsTable() {
+async function loadLostReportsTable(pageNumber = tablePaginationState.lostReports || 1) {
   const tbody = document.getElementById('lostReportsTableBody');
   if (!tbody || !window.supabaseClient) return;
+
+  tablePaginationState.lostReports = Math.max(1, Number(pageNumber) || 1);
+  const paginationContainer = document.getElementById('lostReportsPagination');
+  if (paginationContainer) paginationContainer.hidden = true;
 
   tbody.innerHTML = '<tr><td colspan="5" class="no-data">Loading reports...</td></tr>';
 
   try {
-    const { data, error } = await window.supabaseClient
+    const from = (tablePaginationState.lostReports - 1) * TABLE_PAGE_SIZE;
+    const to = from + TABLE_PAGE_SIZE - 1;
+
+    const { data: pagedData, count, error } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id, match_score')
+      .select('id, student_name, item_description, last_location, status, created_at, ref_photo_url_1, matched_item_id, match_score', { count: 'exact' })
       .or('matched_item_id.is.null,and(matched_item_id.not.is.null,match_score.lt.70)')
       .neq('status', 'resolved')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (error) throw error;
 
-    console.log(`[loadLostReportsTable] Rows fetched: ${data?.length ?? 0}`);
+    console.log(`[loadLostReportsTable] Rows fetched: ${pagedData?.length ?? 0}, Total: ${count ?? 0}`);
 
-    if (!data || data.length === 0) {
+    if (!pagedData || pagedData.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5" class="no-data">No pending lost item reports found.</td></tr>';
+      renderPaginationControls('lostReports', count || 0, tablePaginationState.lostReports);
       return;
     }
 
-    tbody.innerHTML = data.map(report => {
+    tbody.innerHTML = pagedData.map(report => {
       const reportDate = new Date(report.created_at).toLocaleDateString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
       });
@@ -260,9 +325,12 @@ async function loadLostReportsTable() {
           </td>
         </tr>`;
     }).join('');
+
+    renderPaginationControls('lostReports', count || 0, tablePaginationState.lostReports);
   } catch (error) {
     console.error('[loadLostReportsTable] Error:', error);
     tbody.innerHTML = '<tr><td colspan="5" class="error">Error loading reports. Please refresh.</td></tr>';
+    renderPaginationControls('lostReports', 0, tablePaginationState.lostReports);
   }
 }
 
@@ -761,23 +829,32 @@ async function fetchDashboardStats() {
 }
 
 // ========== RESOLVED TRANSACTIONS TABLE ==========
-async function loadResolvedTransactionsTable() {
+async function loadResolvedTransactionsTable(pageNumber = tablePaginationState.resolvedTransactions || 1) {
   const tbody = document.getElementById('resolvedTransactionsTableBody');
   if (!tbody || !window.supabaseClient) return;
+
+  tablePaginationState.resolvedTransactions = Math.max(1, Number(pageNumber) || 1);
+  const paginationContainer = document.getElementById('resolvedTransactionsPagination');
+  if (paginationContainer) paginationContainer.hidden = true;
 
   tbody.innerHTML = '<tr><td colspan="6" class="no-data">Loading resolved transactions...</td></tr>';
 
   try {
-    const { data: reports, error: reportsError } = await window.supabaseClient
+    const from = (tablePaginationState.resolvedTransactions - 1) * TABLE_PAGE_SIZE;
+    const to = from + TABLE_PAGE_SIZE - 1;
+
+    const { data: reports, count, error: reportsError } = await window.supabaseClient
       .from('lost_reports')
-      .select('id, student_name, created_at, resolved_at, released_by, matched_item_id')
+      .select('id, student_name, created_at, resolved_at, released_by, matched_item_id', { count: 'exact' })
       .eq('status', 'resolved')
-      .order('resolved_at', { ascending: false });
+      .order('resolved_at', { ascending: false })
+      .range(from, to);
 
     if (reportsError) throw reportsError;
 
     if (!reports || reports.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" class="no-data">No resolved transactions found.</td></tr>';
+      renderPaginationControls('resolvedTransactions', 0, tablePaginationState.resolvedTransactions);
       return;
     }
 
@@ -798,7 +875,7 @@ async function loadResolvedTransactionsTable() {
     }
 
     const rows = reports.map(report => {
-      const matchedItem = report.matched_item_id ? itemsMap[report.matched_item_id] : null;
+      renderPaginationControls('resolvedTransactions', count || 0, tablePaginationState.resolvedTransactions);
 
       const rawUrl = matchedItem?.image_url;
       const itemImageUrl = rawUrl ? getSupabasePublicUrl(rawUrl) : FALLBACK_ITEM_IMAGE;
@@ -829,9 +906,11 @@ async function loadResolvedTransactionsTable() {
 
     tbody.innerHTML = rows.join('');
     console.log(`[loadResolvedTransactionsTable] Success: ${rows.length} rows rendered.`);
+    renderPaginationControls('resolvedTransactions', reports?.count || 0, tablePaginationState.resolvedTransactions);
   } catch (err) {
     console.error('[loadResolvedTransactionsTable] Error:', err);
     tbody.innerHTML = '<tr><td colspan="6" class="error">Error loading data. Check console.</td></tr>';
+    renderPaginationControls('resolvedTransactions', 0, tablePaginationState.resolvedTransactions);
   }
 }
 

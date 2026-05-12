@@ -1119,6 +1119,48 @@ body {
   margin-top: 2px;
 }
 
+/* ── Table Pagination ─────────────────────────────────────── */
+.table-pagination-container {
+  margin-top: 14px;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-pagination-info {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.btn-pagination {
+  background: var(--red);
+  color: var(--white);
+  border: 1px solid var(--red);
+  box-shadow: var(--shadow-card);
+  padding: 10px 16px;
+  min-width: 104px;
+}
+
+.btn-pagination:hover:not(:disabled) {
+  background: var(--red-dark);
+  border-color: var(--red-dark);
+}
+
+.btn-pagination:disabled {
+  background: var(--gold-light);
+  color: var(--text-light);
+  border-color: var(--gold-border);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.75;
+}
+
 .manual-match-selection {
   margin-top: 10px;
   display: flex;
