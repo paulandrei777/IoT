@@ -107,6 +107,32 @@ const stopWords = new Set([
   'thing', 'object', 'looks', 'like', 'very', 'really', 'just', 'only', 'as', 'by', 'from', 'my', 'your'
 ]);
 
+// Primary object categories (nouns) - higher priority keywords
+const primaryObjectKeywords = {
+  phone: ['phone', 'mobile', 'smartphone', 'iphone', 'android'],
+  wallet: ['wallet', 'purse', 'billfold'],
+  keys: ['keys', 'keychain', 'keyring'],
+  case: ['case', 'cover', 'holder', 'pouch'],
+  backpack: ['backpack', 'bag', 'rucksack', 'pack', 'sack'],
+  watch: ['watch', 'smartwatch', 'wristwatch'],
+  ring: ['ring', 'band', 'engagement'],
+  headphones: ['headphones', 'earbuds', 'earphones', 'headset', 'airpods'],
+  glasses: ['glasses', 'spectacles', 'sunglasses', 'shades'],
+  hat: ['hat', 'cap', 'beanie', 'bonnet'],
+  umbrella: ['umbrella', 'parasol'],
+  shoes: ['shoes', 'sneakers', 'boots', 'sandals', 'heels'],
+  jacket: ['jacket', 'coat', 'sweater', 'hoodie', 'cardigan'],
+  bottle: ['bottle', 'tumbler', 'water bottle', 'thermos'],
+  notebook: ['notebook', 'journal', 'pad', 'planner'],
+  pen: ['pen', 'pencil', 'marker'],
+  laptop: ['laptop', 'macbook', 'computer', 'device'],
+  tablet: ['tablet', 'ipad'],
+};
+
+// Color and texture keywords - secondary/accent keywords
+const colorKeywords = ['black', 'white', 'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'brown', 'gray', 'grey', 'silver', 'gold', 'rose', 'transparent', 'clear', 'dark', 'light', 'bright', 'pale', 'metallic'];
+const textureKeywords = ['leather', 'plastic', 'metal', 'fabric', 'canvas', 'denim', 'cotton', 'silk', 'rubber', 'glass', 'ceramic', 'wooden', 'wood'];
+
 const normalizeText = (value) => String(value ?? '')
   .toLowerCase()
   .replace(/[^a-z0-9\s]/g, ' ')
@@ -119,32 +145,130 @@ const tokenize = (value) => normalizeText(value)
 
 const buildComparableText = (item) => [item.display_name || '', item.ai_description || ''].join(' ').trim();
 
+// Extract primary object category from text
+const extractPrimaryObject = (text) => {
+  const normalized = normalizeText(text);
+  
+  for (const [category, keywords] of Object.entries(primaryObjectKeywords)) {
+    for (const keyword of keywords) {
+      if (normalized.includes(keyword)) {
+        return category;
+      }
+    }
+  }
+  
+  return null;
+};
+
+// Extract colors mentioned in text
+const extractColors = (text) => {
+  const normalized = normalizeText(text);
+  const foundColors = [];
+  
+  for (const color of colorKeywords) {
+    if (normalized.includes(color)) {
+      foundColors.push(color);
+    }
+  }
+  
+  return foundColors;
+};
+
+// Extract textures mentioned in text
+const extractTextures = (text) => {
+  const normalized = normalizeText(text);
+  const foundTextures = [];
+  
+  for (const texture of textureKeywords) {
+    if (normalized.includes(texture)) {
+      foundTextures.push(texture);
+    }
+  }
+  
+  return foundTextures;
+};
+
+// Improved similarity score with object category priority
 const simpleSimilarityScore = (studentDescription, itemText) => {
   const studentNormalized = normalizeText(studentDescription);
-  const comparableNormalized = normalizeText(itemText);
+  const itemNormalized = normalizeText(itemText);
 
-  if (!studentNormalized || !comparableNormalized) return 0;
+  if (!studentNormalized || !itemNormalized) return 0;
 
-  const studentTokens = tokenize(studentDescription);
-  const comparableTokens = tokenize(itemText);
-  if (!studentTokens.length || !comparableTokens.length) return 0;
-
-  const comparableSet = new Set(comparableTokens);
-  const overlap = studentTokens.filter(token => comparableSet.has(token)).length;
-  const coverage = overlap / Math.max(studentTokens.length, 1);
-  const reverseCoverage = overlap / Math.max(comparableTokens.length, 1);
-
-  let score = (coverage * 0.65) + (reverseCoverage * 0.35);
-
-  if (studentNormalized.includes(comparableNormalized) || comparableNormalized.includes(studentNormalized)) {
-    score += 0.25;
+  // ========== STEP 1: Compare Primary Objects ==========
+  const studentObject = extractPrimaryObject(studentDescription);
+  const itemObject = extractPrimaryObject(itemText);
+  
+  let objectMatch = 1.0; // Default: benefit of the doubt
+  
+  if (studentObject && itemObject) {
+    if (studentObject !== itemObject) {
+      // Primary objects don't match: penalize by 50%
+      objectMatch = 0.5;
+    } else {
+      // Primary objects match: bonus
+      objectMatch = 1.1;
+    }
+  } else if (studentObject && !itemObject) {
+    // Student specified object, but item description doesn't have it
+    objectMatch = 0.6;
+  } else if (!studentObject && itemObject) {
+    // Item has specific object, student didn't specify
+    objectMatch = 0.8;
   }
 
-  return Math.max(0, Math.min(1, score));
+  // ========== STEP 2: Calculate Token-Based Overlap (Keyword Matching) ==========
+  const studentTokens = tokenize(studentDescription);
+  const itemTokens = tokenize(itemText);
+  
+  if (!studentTokens.length || !itemTokens.length) return 0;
+
+  const itemTokenSet = new Set(itemTokens);
+  const overlap = studentTokens.filter(token => itemTokenSet.has(token)).length;
+  
+  const coverage = overlap / Math.max(studentTokens.length, 1);
+  const reverseCoverage = overlap / Math.max(itemTokens.length, 1);
+  
+  let tokenScore = (coverage * 0.65) + (reverseCoverage * 0.35);
+
+  // ========== STEP 3: Color/Texture Bonus (Secondary) ==========
+  const studentColors = extractColors(studentDescription);
+  const itemColors = extractColors(itemText);
+  const studentTextures = extractTextures(studentDescription);
+  const itemTextures = extractTextures(itemText);
+  
+  let colorMatch = 0;
+  let textureMatch = 0;
+  
+  if (studentColors.length > 0 && itemColors.length > 0) {
+    const colorOverlap = studentColors.filter(c => itemColors.includes(c)).length;
+    colorMatch = colorOverlap / Math.max(studentColors.length, itemColors.length);
+  }
+  
+  if (studentTextures.length > 0 && itemTextures.length > 0) {
+    const textureOverlap = studentTextures.filter(t => itemTextures.includes(t)).length;
+    textureMatch = textureOverlap / Math.max(studentTextures.length, itemTextures.length);
+  }
+
+  // ========== STEP 4: Substring Matching ==========
+  let substringBonus = 0;
+  if (studentNormalized.includes(itemNormalized) || itemNormalized.includes(studentNormalized)) {
+    substringBonus = 0.15;
+  }
+
+  // ========== FINAL SCORE CALCULATION ==========
+  // Object match is critical (50% weight)
+  // Token similarity is important (35% weight)
+  // Color/texture is supporting (10% weight)
+  // Substring bonus is minor (5% weight)
+  let finalScore = (objectMatch * 0.5) + (tokenScore * 0.35) + ((colorMatch + textureMatch) / 2 * 0.1) + substringBonus;
+
+  return Math.max(0, Math.min(1, finalScore));
 };
 
 // Calculate date proximity between item found date and student's reported lost date
 // Returns a human-readable string like "Found 2 hours after reported loss"
+// STRICT: Penalizes mismatches significantly
 const calculateDateProximity = (itemCreatedAt, studentLostDate) => {
   if (!itemCreatedAt || !studentLostDate) return null;
 
@@ -173,6 +297,39 @@ const calculateDateProximity = (itemCreatedAt, studentLostDate) => {
       return `Found ${diffDays} day(s) after reported loss`;
     }
   }
+};
+
+// Calculate date proximity confidence penalty
+// Penalizes matches where the time difference is too large
+// STRICT: Anything beyond 7 days is highly suspicious
+const calculateDateProximityPenalty = (itemCreatedAt, studentLostDate) => {
+  if (!itemCreatedAt || !studentLostDate) {
+    // No dates provided, no penalty
+    return 1.0;
+  }
+
+  const itemTime = new Date(itemCreatedAt).getTime();
+  const lostTime = new Date(studentLostDate).getTime();
+  const diffMs = itemTime - lostTime;
+  const diffHours = Math.abs(diffMs) / (1000 * 60 * 60);
+  const diffDays = diffHours / 24;
+
+  // Penalty based on time difference:
+  // 0-1 hour: no penalty (1.0)
+  // 1-6 hours: minor penalty (0.95)
+  // 6-24 hours: moderate penalty (0.85)
+  // 24-48 hours: significant penalty (0.70)
+  // 48-72 hours: heavy penalty (0.55)
+  // 72+ hours: very heavy penalty (0.4)
+  // 7+ days: extremely suspicious (0.2)
+
+  if (diffHours <= 1) return 1.0;
+  if (diffHours <= 6) return 0.95;
+  if (diffHours <= 24) return 0.85;
+  if (diffHours <= 48) return 0.70;
+  if (diffHours <= 72) return 0.55;
+  if (diffDays <= 7) return 0.4;
+  return 0.2; // 7+ days is highly unlikely
 };
 
 // Filter items by temporal proximity (24 hours before to present)
@@ -208,11 +365,29 @@ const calculateMatchScoresWithGemini = async (studentDescription, items) => {
     created_at: item.created_at,
   }));
 
-  const prompt = `You are a lost-and-found matching assistant. Compare the student's description with each item's name and description.
+  const prompt = `You are a lost-and-found matching assistant with strict matching criteria.
 
-Score by semantic similarity, not exact wording. Treat equivalent phrases as matches across all item types. For example, if the student says "silver watch", that should match "silver wrist watch"; if they say "red backpack", that should match "bagpack/backpack" descriptions; if they mention a color, shape, brand, or distinctive feature, use that as strong evidence.
+CRITICAL RULES:
+1. PRIMARY OBJECT MATCHING (Highest Priority): 
+   - Identify the main noun/object in the student description (e.g., "Phone", "Wallet", "Case", "Backpack")
+   - Identify the main noun/object in each item
+   - If the primary objects DO NOT MATCH (e.g., student looking for "Case" but item is "Phone"), the match score MUST be reduced by at least 50%, regardless of color similarity.
+   - Example: "Black strap case" (item) vs "Black smartphone" (student) = MUST have low score because Case ≠ Phone.
 
-Return ONLY valid JSON with a root object containing a 'matches' array. Each item must have: id, match_score (integer 0-100). No additional text or explanation.
+2. SECONDARY FACTORS (Lower Priority):
+   - Color matches should only increase score if primary objects match or are strongly related.
+   - Texture/material matches are supporting evidence, not primary evidence.
+
+3. KEYWORD HIERARCHY:
+   - Prioritize specific nouns: Phone, Wallet, Keys, Case, Backpack, Watch, Ring, Headphones, Glasses, etc.
+   - De-prioritize generic adjectives: black, silver, small, etc.
+
+4. SEMANTIC SIMILARITY:
+   - "Smartphone" ≈ "Phone" (related, matches)
+   - "Case" ≠ "Phone" (NOT related, low score)
+   - "Backpack" ≈ "Bag" (related, matches)
+
+Return ONLY valid JSON with a root object containing a 'matches' array. Each match must have: id (matching the input), match_score (integer 0-100). No additional text or explanation.
 
 student_description:
 ${studentDescription.trim()}
@@ -294,8 +469,21 @@ const blindSearchMatch = async (req, res) => {
 
     const matches = await calculateMatchScoresWithGemini(item_description, candidates);
     
-    // Sort by match score (descending), then by created_at (most recent first)
-    const sortedMatches = matches.sort((a, b) => {
+    // Apply strict date proximity penalty to all match scores
+    const matchesWithDatePenalty = matches.map(match => {
+      const dateProximityPenalty = calculateDateProximityPenalty(match.created_at, date_missing);
+      const penalizedScore = Math.round(match.match_score * dateProximityPenalty);
+      
+      return {
+        id: match.id,
+        match_score: penalizedScore,
+        created_at: match.created_at,
+        date_penalty_factor: dateProximityPenalty,
+      };
+    });
+    
+    // Sort by penalized match score (descending), then by created_at (most recent first)
+    const sortedMatches = matchesWithDatePenalty.sort((a, b) => {
       if (b.match_score !== a.match_score) {
         return b.match_score - a.match_score;
       }
