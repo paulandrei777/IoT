@@ -380,7 +380,7 @@ function ensureLostReportModal() {
       </div>
       <div class="modal-body">
         <div class="modal-image-wrapper">
-          <img id="lostReportModalImage" src="" alt="Reference photo">
+          <img id="lostReportModalImage" src="" alt="Reference photo" title="Click to zoom" role="button" tabindex="0">
         </div>
         <div class="modal-fields">
           <p><strong>Student Name:</strong> <span id="lostReportModalStudentName"></span></p>
@@ -661,9 +661,20 @@ async function openLostReportModal(report) {
     const refImageUrl = report.ref_photo_url_1 ? getSupabasePublicUrl(report.ref_photo_url_1) : '';
     image.src = refImageUrl || FALLBACK_ITEM_IMAGE;
     image.alt = `${report.student_name || 'Student'} reference photo`;
+    image.style.cursor = refImageUrl ? 'zoom-in' : 'default';
+    image.onclick = refImageUrl ? () => openLightbox(refImageUrl) : null;
+    image.onkeydown = refImageUrl ? (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openLightbox(refImageUrl);
+      }
+    } : null;
     image.onerror = () => {
       image.onerror = null;
       image.src = FALLBACK_ITEM_IMAGE;
+      image.style.cursor = 'default';
+      image.onclick = null;
+      image.onkeydown = null;
     };
   }
 

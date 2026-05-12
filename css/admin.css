@@ -970,6 +970,15 @@ body {
   object-fit: cover;
 }
 
+.modal-image-wrapper img[role="button"] {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modal-image-wrapper img[role="button"]:hover {
+  transform: scale(1.02);
+  box-shadow: 0 10px 24px rgba(163, 0, 0, 0.12);
+}
+
 .modal-fields {
   display: grid;
   gap: 12px;
